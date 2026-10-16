@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neurora — AI-Powered Worldwide Fire Monitoring & Forecasting System</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <!-- Leaflet MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="dark-theme">
+
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-logo">
+        <div class="flame-icon-wrapper">
+          <svg class="flame-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">NEURORA</span>
+          <span class="brand-tagline">Worldwide Environmental Hotspot Forecast</span>
+        </div>
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="mode-switcher" id="modeSwitcher">
+        <button class="mode-btn active" data-mode="global" id="btnModeGlobal">
+          <span class="mode-icon">🌐</span> Global Overview
+        </button>
+        <button class="mode-btn" data-mode="region" id="btnModeRegion">
+          <span class="mode-icon">🎯</span> Regional Analysis
+        </button>
+      </div>
+
+      <!-- Region Selector Dropdown -->
+      <div class="region-selector-wrapper">
+        <select id="regionSelect" class="styled-select" aria-label="Select geographic region">
+          <option value="GLOBAL">🌍 Entire Globe (Worldwide)</option>
+          <optgroup label="Continents">
+            <option value="AFRICA">Africa</option>
+            <option value="SOUTH_AMERICA">South America</option>
+            <option value="NORTH_AMERICA">North America</option>
+            <option value="ASIA">Asia</option>
+            <option value="OCEANIA">Oceania / Australia</option>
+            <option value="EUROPE">Europe</option>
+          </optgroup>
+          <optgroup label="Key Fire Activity Countries">
+            <option value="BRAZIL">Brazil (Amazon / Cerrado)</option>
+            <option value="AUSTRALIA">Australia</option>
+            <option value="UNITED_STATES">United States</option>
+            <option value="CANADA">Canada</option>
+            <option value="CONGO">Dem. Rep. Congo</option>
+            <option value="INDONESIA">Indonesia</option>
+            <option value="INDIA">India</option>
+            <option value="SPAIN">Spain / Mediterranean</option>
+          </optgroup>
+        </select>
+      </div>
+    </div>
+
+    <!-- Search Bar & Controls -->
+    <div class="header-center">
+      <div class="search-box-container">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="globalSearchInput" placeholder="Search country, state, city, coordinates (e.g. 52.52, 13.41)..." autocomplete="off">
+        <button id="searchClearBtn" class="search-clear-btn" style="display: none;">&times;</button>
+        <div id="searchResultsDropdown" class="search-results-dropdown" style="display: none;"></div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- Live Freshness Indicator -->
+      <div class="freshness-pill">
+        <span class="pulsing-dot"></span>
+        <span id="freshnessText">FIRMS Live NRT: Synced</span>
+      </div>
+
+      <!-- API Status Badges -->
+      <div class="api-status-group">
+        <span class="status-badge" title="NASA FIRMS Real Satellite Data Connected"><span class="badge-dot green"></span> FIRMS</span>
+        <span class="status-badge" title="Open-Meteo Global Weather Connected"><span class="badge-dot green"></span> Weather</span>
+        <span class="status-badge" title="OSM Nominatim Geocoding Active"><span class="badge-dot green"></span> OSM</span>
+      </div>
+
+      <button id="btnSettings" class="btn-icon" title="API Settings & Credentials" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+
+      <button id="btnRefresh" class="btn-refresh" title="Refresh Live Satellite Observations">
+        <svg class="refresh-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Global Metrics Strip -->
+  <section class="metrics-strip">
+    <div class="metric-card">
+      <div class="metric-header">
+        <span class="metric-title">TOTAL REPORTED DETECTIONS</span>
+        <span class="metric-badge" id="cardDetectionsWindow">Current Feed</span>
+      </div>
+      <div class="metric-value-row">
+        <span class="metric-number" id="metricTotalDetections">--</span>
+        <span class="metric-sub" id="metricTotalDetectionsSub">satellite observations</span>
+      </div>
+      <div class="metric-footer" id="metricSatBreakdownPills">
+        <!-- Satellites pills filled dynamically -->
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-header">
+        <span class="metric-title">NEW DETECTIONS (LAST 24H)</span>
+        <span class="metric-tag highlight">Recent</span>
+      </div>
+      <div class="metric-value-row">
+        <span class="metric-number" id="metricNew24h">--</span>
+        <span class="metric-sub" id="metricNew24hPct">--</span>
+      </div>
+      <div class="metric-footer">
+        <span class="footer-label">High Confidence:</span>
+        <span class="footer-val text-amber" id="metricHighConf">--</span>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-header">
+        <span class="metric-title">ESTIMATED RISK LEVEL</span>
+        <span class="metric-badge" id="riskBadgeSelected">Active Assessment</span>
+      </div>
+      <div class="metric-value-row">
+        <span class="metric-number" id="metricRiskLevel">--</span>
+        <span class="metric-sub" id="metricRiskScore">Score: --/100</span>
+      </div>
+      <div class="metric-footer" id="metricRiskLocation">
+        <span>Location: Global Centroid</span>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-header">
+        <span class="metric-title">NEXT-DAY FORECASTED COUNT</span>
+        <span class="metric-tag info">Poisson Model</span>
+      </div>
+      <div class="metric-value-row">
+        <span class="metric-number" id="metricForecastCount">--</span>
+        <span class="metric-sub" id="metricForecastTrend">--</span>
+      </div>
+      <div class="metric-footer">
+        <span class="footer-label">Baseline Persist:</span>
+        <span class="footer-val" id="metricBaselineCount">--</span>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-header">
+        <span class="metric-title">CURRENT LOCAL WEATHER</span>
+        <span class="metric-badge" id="weatherStationBadge">Open-Meteo</span>
+      </div>
+      <div class="metric-value-row">
+        <span class="metric-number" id="metricCurrentTemp">-- °C</span>
+        <span class="metric-sub" id="metricCurrentHumidity">RH: --%</span>
+      </div>
+      <div class="metric-footer">
+        <span class="footer-label">Wind:</span>
+        <span class="footer-val" id="metricCurrentWind">-- km/h</span>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-header">
+        <span class="metric-title">RADIATIVE POWER (FRP)</span>
+        <span class="metric-tag">Thermal Output</span>
+      </div>
+      <div class="metric-value-row">
+        <span class="metric-number" id="metricMaxFrp">-- MW</span>
+        <span class="metric-sub">Peak Radiative Power</span>
+      </div>
+      <div class="metric-footer">
+        <span class="footer-label">Average FRP:</span>
+        <span class="footer-val text-cyan" id="metricAvgFrp">-- MW</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Workspace Layout -->
+  <main class="main-layout">
+    
+    <!-- Left Column: Map & Analytics Tabs -->
+    <div class="map-column">
+      
+      <!-- Map Container Card -->
+      <div class="map-card">
+        
+        <!-- Map Floating Control Bar -->
+        <div class="map-filter-bar">
+          <div class="filter-group">
+            <span class="filter-label">Satellite:</span>
+            <div class="filter-buttons" id="satelliteFilters">
+              <button class="filter-btn active" data-sat="ALL">All Sensors</button>
+              <button class="filter-btn" data-sat="NOAA20" title="NOAA-20 VIIRS 375m">NOAA-20</button>
+              <button class="filter-btn" data-sat="NOAA21" title="NOAA-21 VIIRS 375m">NOAA-21</button>
+              <button class="filter-btn" data-sat="SNPP" title="Suomi-NPP VIIRS 375m">Suomi-NPP</button>
+              <button class="filter-btn" data-sat="MODIS" title="MODIS Terra & Aqua 1km">MODIS</button>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <span class="filter-label">Basemap:</span>
+            <div class="filter-buttons" id="basemapButtons">
+              <button class="filter-btn active" data-basemap="dark" title="Real Dark Gray Canvas (Esri Official GIS Standard)">🌌 Real Dark Canvas</button>
+              <button class="filter-btn" data-basemap="night" title="NASA Black Marble (Earth at Night Satellite Radiance)">✨ NASA Night Earth</button>
+              <button class="filter-btn" data-basemap="satellite" title="Real World Satellite Earth (Daylight Space Photography)">🛰️ Real Satellite</button>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <span class="filter-label">Confidence:</span>
+            <select id="confidenceSelect" class="filter-select">
+              <option value="">All Confidence</option>
+              <option value="nominal">Nominal & High</option>
+              <option value="high">High Only</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <span class="filter-label">Min FRP:</span>
+            <div class="range-slider-wrapper">
+              <input type="range" id="minFrpSlider" min="0" max="100" step="5" value="0">
+              <span id="minFrpValue" class="slider-val">0 MW</span>
+            </div>
+          </div>
+
+          <div class="filter-group layer-toggles">
+            <label class="toggle-label" title="Cluster satellite markers at low zoom">
+              <input type="checkbox" id="chkCluster" checked>
+              <span>Cluster</span>
+            </label>
+            <label class="toggle-label" title="Show density heatmap overlay">
+              <input type="checkbox" id="chkHeatmap">
+              <span>Heatmap</span>
+            </label>
+            <label class="toggle-label" title="Show regional fire risk overlay">
+              <input type="checkbox" id="chkRiskLayer" checked>
+              <span>Risk Zones</span>
+            </label>
+          </div>
+
+          <div class="filter-group right-align">
+            <button id="btnResetView" class="btn-sm" title="Reset to global overview">🌍 Full Globe</button>
+          </div>
+        </div>
+
+        <!-- The Leaflet Map Canvas -->
+        <div id="map" class="map-canvas"></div>
+
+        <!-- Floating Map Legends -->
+        <div class="map-legends">
+          <div class="legend-block">
+            <div class="legend-title">Satellite Hotspot Sensors</div>
+            <div class="legend-items">
+              <span class="legend-item"><span class="legend-dot noaa20"></span> NOAA-20 VIIRS</span>
+              <span class="legend-item"><span class="legend-dot noaa21"></span> NOAA-21 VIIRS</span>
+              <span class="legend-item"><span class="legend-dot snpp"></span> Suomi-NPP VIIRS</span>
+              <span class="legend-item"><span class="legend-dot modis"></span> MODIS (Terra/Aqua)</span>
+            </div>
+          </div>
+          <div class="legend-block">
+            <div class="legend-title">Estimated Fire Risk (EFRI)</div>
+            <div class="legend-items">
+              <span class="legend-item"><span class="legend-dot red"></span> RED — High Alert</span>
+              <span class="legend-item"><span class="legend-dot orange"></span> ORANGE — Medium</span>
+              <span class="legend-item"><span class="legend-dot green"></span> GREEN — Low Risk</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Map Footer Coordinates & Instructions -->
+        <div class="map-footer-bar">
+          <span id="mapHoverCoords" class="map-coords-text">Lat: --.----°, Lon: --.----°</span>
+          <span class="map-hint">Click anywhere on the globe to inspect local weather, environmental risk, and nearest detections.</span>
+          <span class="map-attribution">NASA FIRMS • Open-Meteo • OpenStreetMap</span>
+        </div>
+      </div>
+
+      <!-- Lower Tabbed Analytics Panel -->
+      <div class="analytics-tabs-card">
+        <div class="tab-headers">
+          <button class="tab-btn active" data-tab="tabTimeSeries">Historical Daily Counts & Trends</button>
+          <button class="tab-btn" data-tab="tabForecasting">Forecasting Model Evaluation (Chronological Held-Out)</button>
+          <button class="tab-btn" data-tab="tabTable">Satellite Detections Table & Provenance</button>
+        </div>
+
+        <!-- Tab 1: Historical Time Series -->
+        <div class="tab-content active" id="tabTimeSeries">
+          <div class="tab-content-header">
+            <div>
+              <h3 class="tab-title" id="tsRegionTitle">Worldwide Historical Daily Detections</h3>
+              <p class="tab-subtitle">Daily count of deduplicated satellite hotspot events and 7-day rolling baseline</p>
+            </div>
+            <div class="export-actions">
+              <a href="/api/export/csv" class="btn-sm btn-outline" download>📥 Export CSV</a>
+              <a href="/api/export/parquet" class="btn-sm btn-outline" download>📦 Export Parquet</a>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="timeSeriesChart"></canvas>
+          </div>
+          <div class="data-quality-banner">
+            <span class="banner-icon">ℹ️</span>
+            <span class="banner-text"><strong>Data Quality & Coverage Tracking:</strong> Missing satellite observations (e.g. sensor outages or orbital coverage gaps) are distinguished from confirmed zero observations. Missing days are excluded from baseline calculations rather than treated as zero.</span>
+          </div>
+        </div>
+
+        <!-- Tab 2: Forecasting Model Comparison -->
+        <div class="tab-content" id="tabForecasting">
+          <div class="tab-content-header">
+            <div>
+              <h3 class="tab-title">Chronological Model Benchmark Evaluation</h3>
+              <p class="tab-subtitle">Evaluation on held-out test split (strictly time-ordered, zero temporal data leakage)</p>
+            </div>
+            <div class="eval-metrics-pill" id="evalPeriodPill">
+              Held-Out Period: Calculating...
+            </div>
+          </div>
+
+          <div class="forecast-comparison-grid">
+            <div class="comparison-card">
+              <div class="comp-badge baseline">Baseline Model</div>
+              <div class="comp-name">Lag-1 Persistence Benchmark</div>
+              <div class="comp-desc">Predicts count(t) = count(t-1)</div>
+              <div class="comp-metrics">
+                <div class="metric-row">
+                  <span>Held-Out MAE:</span>
+                  <strong id="evalBaselineMae">--</strong>
+                </div>
+                <div class="metric-row">
+                  <span>Held-Out RMSE:</span>
+                  <strong id="evalBaselineRmse">--</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="comparison-card highlight-border">
+              <div class="comp-badge alternative">Alternative Model</div>
+              <div class="comp-name">Regularized Poisson Count Regression</div>
+              <div class="comp-desc">Log-linear count model with multi-day lags, cyclical seasonality, and surface meteorology</div>
+              <div class="comp-metrics">
+                <div class="metric-row">
+                  <span>Held-Out MAE:</span>
+                  <strong id="evalAltMae" class="text-emerald">--</strong>
+                </div>
+                <div class="metric-row">
+                  <span>Held-Out RMSE:</span>
+                  <strong id="evalAltRmse">--</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="comparison-card narrative-card">
+              <div class="comp-badge performance">Empirical Result</div>
+              <div class="narrative-content" id="evalNarrative">
+                Evaluating held-out performance...
+              </div>
+              <div class="improvement-stat" id="evalImprovementStat">
+                MAE Delta: --%
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-container-sm">
+            <canvas id="forecastEvalChart"></canvas>
+          </div>
+          <div class="forecast-disclaimer">
+            <strong>Counting Methodology Definition:</strong> Forecasted values represent satellite-observed active fire detection counts (VIIRS/MODIS pixels meeting thermal anomaly thresholds). They do not equal individual ground fires or burned area acreage.
+          </div>
+        </div>
+
+        <!-- Tab 3: Hotspot Table -->
+        <div class="tab-content" id="tabTable">
+          <div class="tab-content-header">
+            <div>
+              <h3 class="tab-title">Recent Satellite Detections</h3>
+              <p class="tab-subtitle" id="tableSubtitle">Displaying real satellite observations with source coordinates and attributes</p>
+            </div>
+            <div class="table-counts-badge" id="tableCountBadge">0 records</div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="hotspotsTable">
+              <thead>
+                <tr>
+                  <th>Satellite / Platform</th>
+                  <th>Instrument</th>
+                  <th>Date & Time (UTC)</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
+                  <th>Brightness (K)</th>
+                  <th>FRP (MW)</th>
+                  <th>Confidence</th>
+                  <th>Day/Night</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="hotspotsTableBody">
+                <tr><td colspan="10" class="loading-td">Loading satellite observations...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Right Column: Sidebar Panels (Inspection, Risk, Weather, Forecast) -->
+    <aside class="sidebar-column">
+      
+      <!-- Panel 1: Location Inspector -->
+      <div class="sidebar-card">
+        <div class="sidebar-card-header">
+          <div class="header-title-row">
+            <span class="card-icon">📍</span>
+            <h4 class="card-title">Selected Location</h4>
+          </div>
+          <span class="location-resolved-badge" id="locResolvedBadge">Resolved</span>
+        </div>
+        <div class="location-info-body">
+          <div class="loc-name-large" id="selectedLocName">Global Centroid</div>
+          <div class="loc-coords" id="selectedLocCoords">0.0000°, 0.0000°</div>
+          <div class="loc-admin" id="selectedLocAdmin">International / Ocean</div>
+        </div>
+      </div>
+
+      <!-- Panel 2: Environmental Fire Risk & Three-Level Alerts -->
+      <div class="sidebar-card">
+        <div class="sidebar-card-header">
+          <div class="header-title-row">
+            <span class="card-icon">🔥</span>
+            <h4 class="card-title">Environmental Fire-Risk (EFRI)</h4>
+          </div>
+          <span class="alert-status-pill" id="riskAlertPill">GREEN</span>
+        </div>
+
+        <!-- Score Gauge & Alert Title -->
+        <div class="risk-gauge-box" id="riskGaugeContainer">
+          <div class="alert-banner" id="riskAlertBanner">
+            <span class="alert-banner-text" id="riskAlertTitle">GREEN — LOW RISK</span>
+          </div>
+          <div class="gauge-meter-wrapper">
+            <div class="gauge-circle-outer">
+              <div class="gauge-val" id="riskGaugeScore">15</div>
+              <div class="gauge-max">/ 100</div>
+            </div>
+          </div>
+          <p class="risk-summary-text" id="riskSummaryText">
+            Available meteorological and satellite evidence does not indicate elevated environmental risk.
+          </p>
+        </div>
+
+        <!-- Contributing Factors Breakdown -->
+        <div class="factors-section">
+          <div class="section-subtitle">Contributing Environmental Factors</div>
+          
+          <div class="factor-row">
+            <div class="factor-header">
+              <span>Temperature</span>
+              <span id="factTempVal">24.0°C</span>
+            </div>
+            <div class="progress-track"><div class="progress-bar temp" id="factTempBar" style="width: 30%;"></div></div>
+          </div>
+
+          <div class="factor-row">
+            <div class="factor-header">
+              <span>Relative Humidity Deficit</span>
+              <span id="factRhVal">55%</span>
+            </div>
+            <div class="progress-track"><div class="progress-bar rh" id="factRhBar" style="width: 40%;"></div></div>
+          </div>
+
+          <div class="factor-row">
+            <div class="factor-header">
+              <span>Wind Velocity Factor</span>
+              <span id="factWindVal">12.0 km/h</span>
+            </div>
+            <div class="progress-track"><div class="progress-bar wind" id="factWindBar" style="width: 25%;"></div></div>
+          </div>
+
+          <div class="factor-row">
+            <div class="factor-header">
+              <span>Moisture Deficit (Drought)</span>
+              <span id="factMoistVal">Dry Spell</span>
+            </div>
+            <div class="progress-track"><div class="progress-bar precip" id="factMoistBar" style="width: 60%;"></div></div>
+          </div>
+
+          <div class="factor-row">
+            <div class="factor-header">
+              <span>Nearby Satellite Hotspot Activity</span>
+              <span id="factHotspotVal">0 detections</span>
+            </div>
+            <div class="progress-track"><div class="progress-bar hotspots" id="factHotspotBar" style="width: 10%;"></div></div>
+          </div>
+        </div>
+
+        <!-- Factor Highlights & Recommendations -->
+        <div class="recommendations-box">
+          <div class="section-subtitle">Monitoring Guidance & Limitations</div>
+          <ul class="rec-list" id="riskRecList">
+            <li>Standard observation cycle maintained.</li>
+            <li>Note: A green alert does not guarantee zero fire activity (small surface fires or heavy cloud obscuration may avoid satellite detection).</li>
+          </ul>
+        </div>
+
+        <!-- Limitations Alert -->
+        <div class="scientific-disclaimer-box">
+          <span class="disc-icon">⚠️</span>
+          <span class="disc-text">Advisory index only. Not an official emergency warning or evacuation order. Comply with local civil defense bulletins.</span>
+        </div>
+      </div>
+
+      <!-- Panel 3: Live Meteorological Station -->
+      <div class="sidebar-card">
+        <div class="sidebar-card-header">
+          <div class="header-title-row">
+            <span class="card-icon">⛅</span>
+            <h4 class="card-title">Live Weather & Atmosphere</h4>
+          </div>
+          <span class="station-timestamp" id="weatherTimestamp">--:-- UTC</span>
+        </div>
+
+        <div class="weather-current-grid">
+          <div class="weather-stat-box">
+            <span class="stat-label">Temperature</span>
+            <span class="stat-val" id="weatherTemp">-- °C</span>
+            <span class="stat-sub" id="weatherApparent">Feels like -- °C</span>
+          </div>
+
+          <div class="weather-stat-box">
+            <span class="stat-label">Humidity</span>
+            <span class="stat-val" id="weatherHumidity">-- %</span>
+            <span class="stat-sub">Relative moisture</span>
+          </div>
+
+          <div class="weather-stat-box">
+            <span class="stat-label">Wind Speed</span>
+            <div class="wind-val-row">
+              <span class="stat-val" id="weatherWind">-- km/h</span>
+              <span class="wind-compass" id="weatherWindCompass">--</span>
+            </div>
+            <span class="stat-sub" id="weatherWindGust">Gusts: -- km/h</span>
+          </div>
+
+          <div class="weather-stat-box">
+            <span class="stat-label">Precipitation</span>
+            <span class="stat-val" id="weatherPrecip">0.0 mm</span>
+            <span class="stat-sub">Recent 1h</span>
+          </div>
+        </div>
+
+        <!-- Hourly Trend Chart -->
+        <div class="hourly-weather-chart-box">
+          <div class="section-subtitle">24-Hour Temperature & Humidity Forecast</div>
+          <div class="chart-container-xs">
+            <canvas id="weatherHourlyChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Atmospheric Oxygen Card -->
+        <div class="atmospheric-oxygen-card">
+          <div class="oxygen-header">
+            <span class="oxygen-title">Atmospheric Oxygen (O₂) Status</span>
+            <span class="oxygen-badge-unavailable">Unavailable</span>
+          </div>
+          <div class="oxygen-statement" id="oxygenStatement">
+            Oxygen measurement unavailable from the connected data sources.
+          </div>
+          <div class="oxygen-scientific-note" id="oxygenNote">
+            Standard global meteorological station networks monitor tropospheric thermodynamic variables (temperature, vapor pressure, wind, precipitation) but do not record localized oxygen fluctuations. Ordinary atmospheric oxygen concentration (~20.95%) remains virtually uniform in the lower atmosphere globally and is not a direct predictor of wildfire ignition. Fire initiation and spread are governed by fuel moisture deficit, high temperature, wind velocity, and ignition sources.
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">System Settings & Data Provider Configuration</h3>
+        <button id="modalCloseBtn" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="config-section">
+          <h4>NASA FIRMS API Configuration</h4>
+          <p class="config-desc">
+            Neurora comes pre-configured with real-time public global NRT feeds for VIIRS NOAA-20, NOAA-21, Suomi-NPP, and MODIS.
+            If you have a dedicated NASA FIRMS MAP_KEY, enter it below to enable custom bounding-box multi-day queries.
+          </p>
+          <div class="form-group">
+            <label for="inputFirmsKey">NASA FIRMS MAP Key:</label>
+            <input type="text" id="inputFirmsKey" placeholder="e.g. 7a3f8b912c...">
+            <span class="form-help">Get a free NASA key at <a href="https://firms.modaps.eosdis.nasa.gov/api/map_key/" target="_blank">firms.modaps.eosdis.nasa.gov/api/map_key/</a></span>
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h4>Connected Data Services</h4>
+          <ul class="provider-list">
+            <li><strong>NASA FIRMS:</strong> Active fire detection products (VIIRS 375m & MODIS 1km)</li>
+            <li><strong>Open-Meteo:</strong> Global meteorological reanalysis and forecast models (ECMWF, GFS, DWD)</li>
+            <li><strong>OpenStreetMap Nominatim:</strong> Global reverse geocoding & place name resolution</li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="modalCancelBtn" class="btn-sm btn-outline">Close</button>
+        <button id="modalSaveBtn" class="btn-sm btn-primary">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/charts.js"></script>
+  <script src="/static/js/map.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
