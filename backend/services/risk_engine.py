@@ -122,48 +122,51 @@ class EnvironmentalFireRiskEngine:
         raw_score = (weather_base + interaction_boost) * 0.65 + (hotspot_score * 0.35)
         final_score = int(round(max(0.0, min(100.0, raw_score))))
 
-        # Determine Alert Category
+        # Determine Alert Category & Review Priority
         contributing_factors: List[str] = []
         if final_score >= 65:
             alert_level = "RED"
-            alert_title = "RED — HIGH ALERT"
+            alert_title = "High review priority"
+            review_priority = "High review priority"
             alert_class = "danger"
             color_hex = "#EF4444"
             summary_desc = (
-                f"Elevated estimated environmental fire risk detected at {location_name}. "
-                "Atmospheric dryness, thermal conditions, and/or active satellite-detected hotspots suggest high combustion potential."
+                f"Elevated environmental fire risk indicator at {location_name}. "
+                "Atmospheric dryness, temperature, and/or active satellite-detected hotspots suggest high review priority for analyst assessment."
             )
             recommendations = [
-                "Intensify continuous satellite observation overpasses (NOAA-20/21, Suomi-NPP, MODIS).",
-                "Monitor local air quality and potential smoke plume drift.",
-                "Verify with official local forestry and civil protection emergency bulletins.",
-                "Review immediate agricultural burning restrictions and dry-fuel buffers."
+                "Prioritize continuous satellite overpass tracking (NOAA-20/21, Suomi-NPP, MODIS).",
+                "Verify thermal cluster persistence and repeat detections in surrounding 8km radius.",
+                "Review local relative humidity depression and wind gust trends.",
+                "Notice: For analytical screening only; not for tactical emergency dispatch or evacuation orders."
             ]
         elif final_score >= 35:
             alert_level = "ORANGE"
-            alert_title = "ORANGE — MEDIUM ALERT"
+            alert_title = "Medium review priority"
+            review_priority = "Medium review priority"
             alert_class = "warning"
             color_hex = "#F97316"
             summary_desc = (
-                f"Moderate estimated environmental fire risk at {location_name}. "
-                "Weather variables indicate favorable drying conditions with moderate potential for ignition spread."
+                f"Moderate environmental fire risk indicator at {location_name}. "
+                "Weather variables indicate drying trends with moderate review priority for satellite observation."
             )
             recommendations = [
-                "Maintain periodic satellite monitoring across upcoming orbital cycles.",
-                "Track upcoming humidity drops or increasing wind gusts in 24h forecast.",
-                "Check regional agricultural and forest boundary activity."
+                "Schedule periodic satellite review across upcoming orbital revisit passes.",
+                "Track upcoming humidity drops or increasing wind gusts in 24h weather forecast.",
+                "Cross-examine repeat hotspot observations to filter transient thermal signatures."
             ]
         else:
             alert_level = "GREEN"
-            alert_title = "GREEN — LOW RISK"
+            alert_title = "Low review priority"
+            review_priority = "Low review priority"
             alert_class = "success"
             color_hex = "#10B981"
             summary_desc = (
-                f"Available meteorological and satellite evidence does not indicate elevated environmental fire risk at {location_name}."
+                f"Available meteorological and satellite evidence indicates low review priority at {location_name}."
             )
             recommendations = [
-                "Routine observation schedule remains sufficient.",
-                "Note: A green alert does not guarantee zero fire activity (small surface fires under dense canopy or heavy clouds may not be detectable by satellites)."
+                "Standard background satellite observation cycle remains sufficient.",
+                "Note: Low review priority does not guarantee absence of fires (small surface fires under dense canopy or heavy clouds may not be detectable by satellites)."
             ]
 
         # Factor contributions explanations
@@ -184,6 +187,7 @@ class EnvironmentalFireRiskEngine:
             "score": final_score,
             "alert_level": alert_level,
             "alert_title": alert_title,
+            "review_priority": review_priority,
             "color_hex": color_hex,
             "location_name": location_name,
             "summary": summary_desc,
@@ -221,9 +225,9 @@ class EnvironmentalFireRiskEngine:
             "contributing_factors": contributing_factors,
             "recommendations": recommendations,
             "limitations_disclaimer": (
-                "DISCLAIMER & LIMITATIONS: The Environmental Fire-Risk Index (EFRI) is an advisory scientific indicator "
-                "synthesized from satellite thermal radiometry and numerical weather reanalysis. It is NOT an official "
-                "civil emergency warning or evacuation order. Satellite sensors (VIIRS/MODIS) cannot detect fires obscured by "
+                "NON-EMERGENCY SYSTEM NOTICE: This dashboard is an analytical triage and scientific indicator "
+                "synthesized from satellite thermal radiometry and numerical weather reanalysis. It is NOT an operational "
+                "emergency-response system, dispatch service, or official civil defense evacuation warning. Satellite sensors (VIIRS/MODIS) cannot detect fires obscured by "
                 "thick cloud cover, dense smoke, or under heavy closed-canopy forest, nor does this model replace ground-truth "
                 "forestry inspection. Always defer to official regional civil defense and emergency authorities."
             )

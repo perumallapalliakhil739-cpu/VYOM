@@ -1,16 +1,20 @@
-# Neurora — AI-Powered Worldwide Fire Monitoring & Forecasting System
+# Neurora — Fire Detection Triage Dashboard
 
-**Global Environmental Hotspot Activity Forecast System**  
+**Global Environmental Hotspot Observation Triage & Forecast System**  
 *Built with Real Satellite Observations, Global Geospatial Maps, Live Meteorological Data, and Chronological Count Forecasting.*
+
+> [!IMPORTANT]
+> **NON-EMERGENCY SYSTEM NOTICE:** Neurora is an analytical triage platform and scientific research dashboard for spaceborne thermal anomalies. It is **NOT** an operational emergency-response system, dispatch service, or civil defense evacuation warning platform. For active emergency situations or immediate danger to life and property, contact official local emergency services and civil protection authorities.
 
 ---
 
 ## 1. Project Overview
 
-**Neurora** is an advanced worldwide environmental intelligence dashboard and machine-learning forecasting system designed to monitor active thermal hotspots and forecast daily satellite fire detections across the entire globe.
+**Neurora** is an advanced worldwide environmental intelligence and triage dashboard designed to monitor active spaceborne thermal hotspots, prioritize individual satellite observations for analyst review, and forecast daily satellite fire detections across the entire globe.
 
 ### Key Capabilities
 - **Worldwide Coverage:** Full global map covering all continents, countries, oceans, islands, and custom bounding boxes.
+- **Ranked Observation Triage & Per-Detection Explainability:** Prioritizes individual satellite detections based on **time (recency), confidence, FRP (Fire Radiative Power), and repeat detections**, complete with human-readable per-row explanations (e.g. *"Ranked high because: recent, high FRP, 4 repeats"*).
 - **Dark Canvas & Real World Satellite Maps:** Instant 1-click toggling between:
   - **🌌 Real Dark Canvas (Active Default):** Official GIS standard Esri World Dark Gray Canvas with crisp geopolitical borders and place labels, tailored for high-contrast thermal hotspot radiation.
   - **✨ NASA Night Earth:** NASA Black Marble (Suomi-NPP VIIRS Day/Night Band) nighttime satellite radiance.
@@ -18,7 +22,7 @@
 - **Real Satellite Observations (NASA FIRMS):** Direct multi-sensor integration of **VIIRS NOAA-20**, **VIIRS NOAA-21**, **VIIRS Suomi-NPP**, and **MODIS Terra/Aqua Collection 6.1**.
 - **Live Surface Meteorology (Open-Meteo):** Real-time temperature, relative humidity, wind speed & direction compass, precipitation deficit, and 24-hour forecast trends.
 - **Atmospheric Oxygen Integrity:** Explicit reporting indicating that atmospheric oxygen concentration is not measured by standard meteorological stations and is not a direct predictor of wildfire ignition, as ambient tropospheric O₂ (~20.95%) is globally ubiquitous.
-- **Explainable Environmental Fire-Risk (EFRI):** Multi-factor risk engine categorizing locations into **RED — HIGH ALERT**, **ORANGE — MEDIUM ALERT**, and **GREEN — LOW RISK** with factor contribution breakdowns, monitoring actions, and transparent limitations.
+- **Explainable Environmental Fire-Risk (EFRI):** Multi-factor risk engine categorizing locations into **High review priority**, **Medium review priority**, and **Low review priority** with factor contribution breakdowns, analyst review procedures, and transparent limitations.
 - **Chronological Time-Series Forecasting:** Predicts next-day satellite-observed fire-detection counts for any region or worldwide, comparing a **Baseline Lag-1 Persistence Benchmark** with a **Regularized Poisson Count Regression Model** on a strictly time-ordered held-out test split.
 - **Historical Data & Reproducible Notebook:** Complete multi-region historical time series exported to CSV and Parquet, accompanied by a Jupyter notebook for verification.
 
@@ -45,7 +49,7 @@ graph TD
 
     subgraph Neurora Frontend
         MAP[Leaflet Interactive Global Map<br/>Clustering, Heatmap, Risk Overlays]
-        PANEL_RISK[Fire Risk Gauge & 3-Level Alerts]
+        PANEL_RISK[Fire Risk Gauge & Review Priority]
         PANEL_WEATHER[Weather Station & 24h Trends]
         PANEL_FORECAST[Forecast Metrics & Model Comparison]
         PANEL_HIST[Historical Trends & Export Actions]
@@ -107,16 +111,64 @@ In compliance with rigorous scientific principles:
 
 ---
 
-## 5. Explainable Environmental Fire-Risk (EFRI)
+## 5. Risk Assessment & Observation Triage Methodologies
 
-The EFRI module computes an explainable 0–100 index integrating meteorological variables with active satellite observations:
+Neurora features a dual-layer risk and triage architecture: **Location-Level EFRI** for geographic regions, and **Per-Detection Observation Triage Ranking** for prioritizing individual spaceborne detections.
+
+---
+
+### A. Location-Level: Explainable Environmental Fire-Risk (EFRI)
+
+The EFRI module computes an explainable 0–100 index for any given geographic coordinate or polygon, blending numerical meteorological potential (65%) with spatial hotspot clustering (35%):
 
 $$\text{EFRI} = 0.65 \times (\text{WeatherBase} + \text{SynergyBoost}) + 0.35 \times \text{ThermalActivity}$$
 
-### Alert Levels
-- **RED — HIGH ALERT (Score $\ge 65$):** Elevated environmental fire danger driven by hot, dry, and windy conditions or high density of active satellite hotspots. Requires continuous satellite overpass monitoring.
-- **ORANGE — MEDIUM ALERT (Score $35 - 64$):** Moderate environmental risk with drying trends and elevated potential for ignition spread.
-- **GREEN — LOW RISK (Score $< 35$):** Evidence does not indicate elevated environmental fire risk. *Explicitly notes that this does not prove a location is completely fire-free (e.g. small surface fires under dense canopy may not be detected).*
+- **WeatherBase:** Synthesized from surface temperature (25%), relative humidity deficit (30%), wind velocity (20%), and precipitation deficit (25%).
+- **SynergyBoost:** Non-linear multiplier triggered when extreme heat (>35°C), low RH (<25%), and strong wind (>30 km/h) co-occur.
+- **ThermalActivity:** Hotspot counts and cumulative FRP within the surrounding geographic radius (~50 km).
+
+#### Review Priority Categories
+- **High review priority (Score $\ge 65$):** Elevated environmental fire indicator driven by high temperatures, low humidity, and strong winds. Analysts should maintain continuous satellite overpass tracking.
+- **Medium review priority (Score $35 - 64$):** Moderate environmental indicator with drying trends; periodic satellite review scheduled.
+- **Low review priority (Score $< 35$):** Evidence does not indicate elevated environmental fire risk. *Explicitly notes that spaceborne sensors cannot guarantee zero fire activity (e.g. small surface burns under dense canopy or thick cloud cover).*
+
+---
+
+### B. Per-Observation Level: Ranked Observation Triage Engine
+
+While the location EFRI score evaluates regional weather conditions, **the Ranked Observation Triage Engine evaluates individual satellite observations (hotspot pixels)** to prioritize which detections analysts should review first.
+
+Each individual detection is scored across four independent remote sensing dimensions:
+
+1. **Time (Observation Recency, 30% Weight):**
+   - Observations $< 1.0\text{h}$ old receive maximum score ($100$).
+   - Scores decay smoothly over time: $< 3\text{h}$ (score 85–95), $< 12\text{h}$ (score 50–70), $> 24\text{h}$ (score 10–20).
+2. **Fire Radiative Power (FRP, 25% Weight):**
+   - Measures radiant heat release in Megawatts (MW) from VIIRS 375m and MODIS 1km sensors.
+   - Extreme intense fires ($> 100\text{ MW}$) receive score $100$.
+   - Moderate ($25 - 50\text{ MW}$) score 60–80; low ($< 10\text{ MW}$) score 20–40.
+3. **Repeat Detections / Vicinity Cluster Density (25% Weight):**
+   - Counts the number of overlapping or nearby satellite detections within an **8 km radius** across multiple orbital sweeps (NOAA-20, NOAA-21, Suomi-NPP, MODIS).
+   - $\ge 4\text{ repeat detections}$ receives score $100$ (indicates confirmed, persistent fire front).
+   - $2 - 3\text{ repeats}$ receives score 60–80; isolated detections ($0\text{ repeats}$) score 15.
+4. **Normalized Confidence (20% Weight):**
+   - Instrument-normalized detection quality: High (100), Nominal (65), Low (30).
+
+#### Composite Triage Formula
+$$\text{TriageScore} = 0.30 \times S_{\text{time}} + 0.25 \times S_{\text{frp}} + 0.25 \times S_{\text{repeat}} + 0.20 \times S_{\text{confidence}}$$
+
+#### Review Priority Tiers & Thresholds
+- **High review priority ($\text{TriageScore} \ge 70$):** Immediate analyst inspection recommended due to high intensity, recent pass, and multi-sensor repeat cluster confirmation.
+- **Medium review priority ($45 \le \text{TriageScore} < 70$):** Moderate intensity or earlier pass; schedule for standard inspection.
+- **Low review priority ($\text{TriageScore} < 45$):** Low FRP, older detection, or isolated single observation.
+
+#### Human-Readable Per-Row Breakdown
+Every row in the dashboard's **Ranked Observation Triage Table** displays an explicit natural language breakdown explaining why it was assigned that priority:
+- *“Ranked high because: recent (1.2h ago), high FRP (85.4 MW), 4 repeats, high confidence”*
+- *“Ranked medium because: earlier pass (8.4h ago), moderate FRP (24.1 MW), 2 repeats, nominal confidence”*
+- *“Ranked low because: older detection (21.5h ago), low FRP (4.8 MW), 0 repeats, nominal confidence”*
+
+Each row is accompanied by individual factor chips (`[⚡ 1.2h ago]`, `[🔥 85.4 MW]`, `[🔁 4 repeats]`, `[✓ high conf]`) and an **Inspect** action that flies the interactive map directly to the observation coordinates.
 
 ---
 

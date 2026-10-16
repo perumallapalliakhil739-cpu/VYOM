@@ -290,32 +290,61 @@ const MapController = {
       localTimeStr = pt.acq_time;
     }
 
+    const rankBadge = pt.triage_rank ? `<span class="popup-rank-badge">Rank #${pt.triage_rank}</span>` : '';
+    const priorityLabel = pt.triage_priority || 'Low review priority';
+    const priorityColor = pt.triage_color || '#10B981';
+    const explanationText = pt.triage_explanation || 'Satellite thermal anomaly observation.';
+    const repeatsText = pt.repeat_count !== undefined ? `${pt.repeat_count} in 8km radius` : '0 (isolated)';
+
     return `
       <div class="hotspot-popup-card">
         <div class="popup-header">
-          <span class="popup-sat-tag" style="color: ${color}">● ${pt.satellite}</span>
+          <div class="popup-header-tags">
+            ${rankBadge}
+            <span class="popup-priority-tag" style="background: ${priorityColor}22; color: ${priorityColor}; border: 1px solid ${priorityColor}55;">
+              ${priorityLabel}
+            </span>
+          </div>
           <span class="popup-time">${pt.acq_date} ${pt.acq_time} UTC</span>
+        </div>
+        <div class="popup-explanation-bar">
+          <strong>${explanationText}</strong>
         </div>
         <div class="popup-place-name">Location: ${pt.latitude.toFixed(4)}°, ${pt.longitude.toFixed(4)}°</div>
         <div class="popup-grid">
-          <div class="popup-label">Instrument:</div>
-          <div class="popup-val">${pt.instrument} (${pt.daynight})</div>
+          <div class="popup-label">Triage Score:</div>
+          <div class="popup-val" style="color: ${priorityColor}; font-weight: 700;">${pt.triage_score || '--'} / 100</div>
+          <div class="popup-label">Satellite / Sensor:</div>
+          <div class="popup-val" style="color: ${color}; font-weight: 600;">● ${pt.satellite} (${pt.instrument})</div>
           <div class="popup-label">Fire Rad. Power:</div>
           <div class="popup-val text-amber">${pt.frp_mw || '--'} MW</div>
+          <div class="popup-label">Repeat Detections:</div>
+          <div class="popup-val">${repeatsText}</div>
           <div class="popup-label">Brightness Temp:</div>
           <div class="popup-val">${pt.brightness_k ? `${pt.brightness_k.toFixed(1)} K (${(pt.brightness_k - 273.15).toFixed(1)}°C)` : '--'}</div>
           <div class="popup-label">Confidence:</div>
           <div class="popup-val">${pt.confidence_raw} (${pt.confidence_norm})</div>
           <div class="popup-label">Local Time:</div>
           <div class="popup-val">${localTimeStr}</div>
-          <div class="popup-label">Product:</div>
-          <div class="popup-val">${pt.product || 'NRT'}</div>
         </div>
-        <button class="popup-btn-analyze" onclick="MapController.handleMapClick(${pt.latitude}, ${pt.longitude})">
-          🔍 Analyze Environmental Risk & Weather
+        <button class="popup-btn-analyze" onclick="MapController.focusHotspot(${pt.latitude}, ${pt.longitude})">
+          🔍 Inspect Local Meteorology & EFRI
         </button>
       </div>
     `;
+  },
+
+  focusHotspot(lat, lon, hotspot = null) {
+    if (!this.map) return;
+    this.map.flyTo([lat, lon], 8, { duration: 1.0 });
+    this.handleMapClick(lat, lon);
+    if (hotspot) {
+      const popupHtml = this.createPopupHtml(hotspot);
+      L.popup({ maxWidth: 320 })
+        .setLatLng([lat, lon])
+        .setContent(popupHtml)
+        .openOn(this.map);
+    }
   },
 
   handleMapClick(lat, lon) {

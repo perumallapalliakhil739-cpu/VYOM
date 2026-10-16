@@ -80,8 +80,8 @@ def test_geocoding_honest_fallback():
     assert "Coordinates" in geo["display_name"] or geo["resolved"] is True
 
 def test_risk_engine_alerts():
-    """Verify explainable multi-factor fire risk calculation across RED, ORANGE, GREEN."""
-    # 1. High danger scenario (Hot, Dry, Windy, Heavy Hotspots) -> RED
+    """Verify explainable multi-factor fire risk calculation across RED, ORANGE, GREEN with review priority labels."""
+    # 1. High danger scenario (Hot, Dry, Windy, Heavy Hotspots) -> RED / High review priority
     red_eval = risk_engine.evaluate_risk(
         temperature_c=41.0,
         relative_humidity_pct=12.0,
@@ -93,12 +93,14 @@ def test_risk_engine_alerts():
         location_name="Test High Danger"
     )
     assert red_eval["alert_level"] == "RED"
+    assert red_eval["alert_title"] == "High review priority"
+    assert red_eval["review_priority"] == "High review priority"
     assert red_eval["score"] >= 65
     assert red_eval["color_hex"] == "#EF4444"
     assert len(red_eval["contributing_factors"]) > 0
-    assert "limitations_disclaimer" in red_eval
+    assert "NON-EMERGENCY" in red_eval["limitations_disclaimer"]
 
-    # 2. Low danger scenario (Cool, Humid, Rain, Zero Hotspots) -> GREEN
+    # 2. Low danger scenario (Cool, Humid, Rain, Zero Hotspots) -> GREEN / Low review priority
     green_eval = risk_engine.evaluate_risk(
         temperature_c=12.0,
         relative_humidity_pct=85.0,
@@ -110,8 +112,41 @@ def test_risk_engine_alerts():
         location_name="Test Low Danger"
     )
     assert green_eval["alert_level"] == "GREEN"
+    assert green_eval["alert_title"] == "Low review priority"
+    assert green_eval["review_priority"] == "Low review priority"
     assert green_eval["score"] < 35
     assert green_eval["color_hex"] == "#10B981"
+
+def test_observation_triage_ranking_and_explanations():
+    """Verify explainable observation triage rankings, repeat counts, and per-row breakdown explanations."""
+    res = firms_service.get_all_normalized_hotspots(max_points=30)
+    hotspots = res.get("hotspots", [])
+    assert len(hotspots) > 0
+
+    top_spot = hotspots[0]
+    # Check triage fields
+    assert "triage_rank" in top_spot
+    assert top_spot["triage_rank"] == 1
+    assert "triage_score" in top_spot
+    assert 0 <= top_spot["triage_score"] <= 100
+    assert "triage_priority" in top_spot
+    assert top_spot["triage_priority"] in ["High review priority", "Medium review priority", "Low review priority"]
+    assert "repeat_count" in top_spot
+    assert "triage_explanation" in top_spot
+    assert "Ranked " in top_spot["triage_explanation"]
+    assert "because:" in top_spot["triage_explanation"]
+    assert "triage_factors" in top_spot
+    assert "time" in top_spot["triage_factors"]
+    assert "frp" in top_spot["triage_factors"]
+    assert "repeats" in top_spot["triage_factors"]
+    assert "confidence" in top_spot["triage_factors"]
+
+    # Verify API filtering by priority
+    response = client.get("/api/hotspots?priority=high&limit=10")
+    assert response.status_code == 200
+    data = response.json()
+    for h in data["hotspots"]:
+        assert h["triage_tier"] == "HIGH"
 
 def test_risk_api_endpoint():
     """Verify /api/risk endpoint."""
@@ -121,6 +156,7 @@ def test_risk_api_endpoint():
     assert "score" in data
     assert "alert_level" in data
     assert data["alert_level"] in ["RED", "ORANGE", "GREEN"]
+    assert "review_priority" in data
     assert "factors" in data
 
 def test_forecasting_engine_chronological_evaluation():

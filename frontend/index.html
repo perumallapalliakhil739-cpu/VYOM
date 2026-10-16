@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Neurora — AI-Powered Worldwide Fire Monitoring & Forecasting System</title>
+  <title>Neurora — Fire Detection Triage Dashboard</title>
   
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,7 +35,7 @@
         </div>
         <div class="brand-text">
           <span class="brand-name">NEURORA</span>
-          <span class="brand-tagline">Worldwide Environmental Hotspot Forecast</span>
+          <span class="brand-tagline">Fire Detection Triage Dashboard</span>
         </div>
       </div>
 
@@ -120,6 +120,17 @@
     </div>
   </header>
 
+  <!-- Visible Non-Emergency System Notice Banner -->
+  <aside class="system-disclaimer-banner" role="alert" aria-label="Non-emergency system notice">
+    <div class="disclaimer-badge">
+      <span class="warning-icon">⚠️</span>
+      <strong>NOT AN EMERGENCY-RESPONSE SYSTEM</strong>
+    </div>
+    <div class="disclaimer-text">
+      This platform is an analyst triage dashboard and scientific evaluation tool for spaceborne thermal anomalies. It is <strong>NOT</strong> an operational emergency-response system, dispatch service, or evacuation warning platform. For active emergency situations or immediate danger, contact local emergency services and civil protection authorities.
+    </div>
+  </aside>
+
   <!-- Global Metrics Strip -->
   <section class="metrics-strip">
     <div class="metric-card">
@@ -153,7 +164,7 @@
 
     <div class="metric-card">
       <div class="metric-header">
-        <span class="metric-title">ESTIMATED RISK LEVEL</span>
+        <span class="metric-title">REVIEW PRIORITY LEVEL</span>
         <span class="metric-badge" id="riskBadgeSelected">Active Assessment</span>
       </div>
       <div class="metric-value-row">
@@ -294,11 +305,11 @@
             </div>
           </div>
           <div class="legend-block">
-            <div class="legend-title">Estimated Fire Risk (EFRI)</div>
+            <div class="legend-title">Review Priority (EFRI)</div>
             <div class="legend-items">
-              <span class="legend-item"><span class="legend-dot red"></span> RED — High Alert</span>
-              <span class="legend-item"><span class="legend-dot orange"></span> ORANGE — Medium</span>
-              <span class="legend-item"><span class="legend-dot green"></span> GREEN — Low Risk</span>
+              <span class="legend-item"><span class="legend-dot red"></span> High review priority</span>
+              <span class="legend-item"><span class="legend-dot orange"></span> Medium review priority</span>
+              <span class="legend-item"><span class="legend-dot green"></span> Low review priority</span>
             </div>
           </div>
         </div>
@@ -306,7 +317,7 @@
         <!-- Map Footer Coordinates & Instructions -->
         <div class="map-footer-bar">
           <span id="mapHoverCoords" class="map-coords-text">Lat: --.----°, Lon: --.----°</span>
-          <span class="map-hint">Click anywhere on the globe to inspect local weather, environmental risk, and nearest detections.</span>
+          <span class="map-hint">Click anywhere on the globe to inspect local weather, review priority, and nearest detections.</span>
           <span class="map-attribution">NASA FIRMS • Open-Meteo • OpenStreetMap</span>
         </div>
       </div>
@@ -314,14 +325,14 @@
       <!-- Lower Tabbed Analytics Panel -->
       <div class="analytics-tabs-card">
         <div class="tab-headers">
-          <button class="tab-btn active" data-tab="tabTimeSeries">Historical Daily Counts & Trends</button>
+          <button class="tab-btn active" data-tab="tabTable">🎯 Ranked Observation Triage & Explanations</button>
+          <button class="tab-btn" data-tab="tabTimeSeries">Historical Daily Counts & Trends</button>
           <button class="tab-btn" data-tab="tabForecasting">Forecasting Model Evaluation (Chronological Held-Out)</button>
-          <button class="tab-btn" data-tab="tabTable">Satellite Detections Table & Provenance</button>
           <button class="tab-btn" data-tab="tabAtmosphericScience">🔬 Satellite Science & Cloud/Smoke Penetration</button>
         </div>
 
         <!-- Tab 1: Historical Time Series -->
-        <div class="tab-content active" id="tabTimeSeries">
+        <div class="tab-content" id="tabTimeSeries">
           <div class="tab-content-header">
             <div>
               <h3 class="tab-title" id="tsRegionTitle">Worldwide Historical Daily Detections</h3>
@@ -405,36 +416,72 @@
           </div>
         </div>
 
-        <!-- Tab 3: Hotspot Table -->
-        <div class="tab-content" id="tabTable">
+        <!-- Tab: Ranked Observation Triage & Explanations Table -->
+        <div class="tab-content active" id="tabTable">
           <div class="tab-content-header">
             <div>
-              <h3 class="tab-title">Ranked Satellite Observations (Individual Priority Scoring)</h3>
-              <p class="tab-subtitle" id="tableSubtitle">Individual detections ranked by observation time recency, confidence, Fire Radiative Power (FRP), and spatial repeat cluster detections — with transparent per-observation explanations</p>
+              <h3 class="tab-title">Ranked Observation Triage Table</h3>
+              <p class="tab-subtitle" id="tableSubtitle">Ranked list of individual satellite observations by recency, confidence, FRP, and repeat detections — with per-row breakdown explanations</p>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
               <div class="audit-summary-pill" id="auditSummaryPill" title="Auditing data pipeline integrity">🛡️ Quality Audit: Loading...</div>
-              <div class="table-counts-badge" id="tableCountBadge">0 records</div>
+              <div class="table-counts-badge" id="tableCountBadge">Loading detections...</div>
             </div>
           </div>
+
+          <!-- Triage Toolbar: Priority Filters, Cluster Toggles, Sort, & Instant Search -->
+          <div class="triage-toolbar">
+            <div class="triage-filter-group">
+              <span class="triage-toolbar-label">Review Priority:</span>
+              <div class="triage-btn-group" id="triagePriorityFilter">
+                <button class="triage-pill-btn active" data-priority="ALL">All Priorities</button>
+                <button class="triage-pill-btn pill-high" data-priority="HIGH">🔴 High Review Priority (<span id="countHighPriority">--</span>)</button>
+                <button class="triage-pill-btn pill-medium" data-priority="MEDIUM">🟠 Medium Review Priority (<span id="countMedPriority">--</span>)</button>
+                <button class="triage-pill-btn pill-low" data-priority="LOW">🟢 Low Review Priority (<span id="countLowPriority">--</span>)</button>
+              </div>
+            </div>
+
+            <div class="triage-filter-group">
+              <label class="toggle-label cluster-filter-toggle" title="Filter to persistent clusters with ≥1 repeat detection in vicinity">
+                <input type="checkbox" id="chkOnlyRepeats">
+                <span>🔁 Multi-Detection Clusters Only (<span id="countClusterOnly">--</span>)</span>
+              </label>
+            </div>
+
+            <div class="triage-filter-group triage-sort-group">
+              <span class="triage-toolbar-label">Sort:</span>
+              <select id="triageSortSelect" class="filter-select">
+                <option value="rank">Triage Rank (Default)</option>
+                <option value="frp">Highest FRP (MW)</option>
+                <option value="recency">Most Recent (Time)</option>
+                <option value="repeats">Most Repeat Detections</option>
+              </select>
+            </div>
+
+            <div class="triage-filter-group search-inline-group">
+              <input type="text" id="triageTableSearchInput" class="triage-search-input" placeholder="Search satellite, coordinates, country...">
+            </div>
+          </div>
+
           <div class="table-responsive">
-            <table class="data-table ranked-hotspots-table" id="hotspotsTable">
+            <table class="data-table ranked-triage-table" id="hotspotsTable">
               <thead>
                 <tr>
-                  <th>Rank & Priority</th>
-                  <th>Priority Score</th>
-                  <th>Satellite / Platform</th>
-                  <th>Observation Time</th>
-                  <th>Coordinates</th>
-                  <th>FRP (MW)</th>
-                  <th>Confidence</th>
-                  <th>Repeat Detections</th>
-                  <th>Why Ranked (Per-Row Explanation)</th>
-                  <th>Action</th>
+                  <th style="width: 75px;">Rank</th>
+                  <th style="width: 145px;">Review Priority</th>
+                  <th style="width: 95px;">Triage Score</th>
+                  <th style="min-width: 320px;">Triage Explanation (Per-Row Breakdown)</th>
+                  <th style="width: 130px;">Time / Recency</th>
+                  <th style="width: 95px;">FRP</th>
+                  <th style="width: 115px;">Repeats (8km)</th>
+                  <th style="width: 105px;">Confidence</th>
+                  <th style="width: 140px;">Satellite / Sensor</th>
+                  <th style="width: 125px;">Coordinates</th>
+                  <th style="width: 85px;">Action</th>
                 </tr>
               </thead>
               <tbody id="hotspotsTableBody">
-                <tr><td colspan="10" class="loading-td">Loading ranked satellite observations...</td></tr>
+                <tr><td colspan="11" class="loading-td">Loading ranked observation triage table...</td></tr>
               </tbody>
             </table>
           </div>
@@ -536,46 +583,7 @@
                 </table>
               </div>
               <div class="science-footer-note">
-                <strong>Temporal Gap Exploitation:</strong> Because clouds move continuously, staggered 5-satellite orbits observe the same location up to 6–8 times daily, detecting fire fronts during cloud-cover breaks.
-              </div>
-            </div>
-
-            <!-- Science Card 5: Synthetic Aperture Radar (SAR) All-Weather Penetration -->
-            <div class="science-card">
-              <div class="science-card-header">
-                <span class="science-icon">📡</span>
-                <h4 class="science-card-title">All-Weather SAR Radar & Microwave Penetration</h4>
-              </div>
-              <p class="science-desc">
-                When massive planetary cloud decks and monsoons completely blind optical and infrared sensors, spaceborne radar operates unimpeded:
-              </p>
-              <ul class="science-bullets">
-                <li><strong>Centimeter Radar Pulses:</strong> Sentinel-1 (C-Band, 5.6 cm) and NISAR (L-Band, 24 cm) use wavelengths 1,000 to 10,000 times larger than cloud water droplets, penetrating dense cloud decks, storm fronts, and darkness.</li>
-                <li><strong>Dielectric Backscatter Shift:</strong> As wildfires consume tree canopy and organic ground litter, radar backscatter drops sharply. Polarimetric decomposition (VV/VH) maps active burn perimeters under total cloud cover.</li>
-                <li><strong>Soil & Fuel Moisture:</strong> L-Band radar continuously monitors ground soil moisture deficit through clouds before ignition occurs.</li>
-              </ul>
-              <div class="science-footer-note">
-                <strong>Operational Status:</strong> European Space Agency (ESA) Sentinel-1 C-SAR & NASA/ISRO NISAR L/S-SAR radar pipelines active.
-              </div>
-            </div>
-
-            <!-- Science Card 6: Geostationary 30-Second Scans & Chemical Gas Tracers -->
-            <div class="science-card">
-              <div class="science-card-header">
-                <span class="science-icon">⚡</span>
-                <h4 class="science-card-title">Geostationary Rapid Scans & Gas Tracers</h4>
-              </div>
-              <p class="science-desc">
-                Two cutting-edge methodologies reveal wildfires concealed beneath cloud layers:
-              </p>
-              <ul class="science-bullets">
-                <li><strong>Geostationary 30-Second Meso-Scans:</strong> GOES-16/18 and Himawari-9 scan regional sectors every 30 to 60 seconds. Even a 90-second rift in moving clouds is instantly captured by the 3.9 µm MWIR channel.</li>
-                <li><strong>Pyrocumulonimbus (PyroCb) Updrafts:</strong> Intense fires produce powerful thermal plumes that punch through cloud ceilings into the upper troposphere.</li>
-                <li><strong>TROPOMI Chemical Tracing:</strong> Sentinel-5P spectrometers track elevated Carbon Monoxide (CO), Nitrogen Dioxide (NO₂), and Aerosol Index above cloud tops, verifying ground fires.</li>
-                <li><strong>Predictive EFRI Continuity:</strong> Neurora's meteorological risk engine computes ground thermodynamic risk uninterrupted during cloud cover.</li>
-              </ul>
-              <div class="science-footer-note">
-                <strong>Multi-Layer Resilience:</strong> The 6-tier defense ensures zero blind spots during prolonged global overcast events.
+                <strong>All-Weather Microwave Horizon:</strong> Synthetic Aperture Radar (SAR, Sentinel-1 C-band 5.6cm & NISAR L-band 24cm) uses centimeter wavelengths that completely penetrate opaque clouds, rain, and darkness to monitor ground moisture and burn perimeters regardless of weather.
               </div>
             </div>
           </div>
@@ -604,20 +612,20 @@
         </div>
       </div>
 
-      <!-- Panel 2: Environmental Fire Risk & Three-Level Alerts -->
+      <!-- Panel 2: Environmental Fire-Risk & Review Priority (EFRI) -->
       <div class="sidebar-card">
         <div class="sidebar-card-header">
           <div class="header-title-row">
             <span class="card-icon">🔥</span>
-            <h4 class="card-title">Environmental Fire-Risk (EFRI)</h4>
+            <h4 class="card-title">Fire-Risk & Review Priority (EFRI)</h4>
           </div>
-          <span class="alert-status-pill" id="riskAlertPill">GREEN</span>
+          <span class="alert-status-pill" id="riskAlertPill">Low review priority</span>
         </div>
 
         <!-- Score Gauge & Alert Title -->
         <div class="risk-gauge-box" id="riskGaugeContainer">
           <div class="alert-banner" id="riskAlertBanner">
-            <span class="alert-banner-text" id="riskAlertTitle">GREEN — LOW RISK</span>
+            <span class="alert-banner-text" id="riskAlertTitle">Low review priority</span>
           </div>
           <div class="gauge-meter-wrapper">
             <div class="gauge-circle-outer">
@@ -677,17 +685,17 @@
 
         <!-- Factor Highlights & Recommendations -->
         <div class="recommendations-box">
-          <div class="section-subtitle">Monitoring Guidance & Limitations</div>
+          <div class="section-subtitle">Triage Guidance & Procedures (Non-Emergency)</div>
           <ul class="rec-list" id="riskRecList">
             <li>Standard observation cycle maintained.</li>
-            <li>Note: A green alert does not guarantee zero fire activity (small surface fires or heavy cloud obscuration may avoid satellite detection).</li>
+            <li>Note: Low review priority does not guarantee absence of fire activity (small surface fires or heavy cloud obscuration may avoid satellite detection).</li>
           </ul>
         </div>
 
         <!-- Limitations Alert -->
         <div class="scientific-disclaimer-box">
           <span class="disc-icon">⚠️</span>
-          <span class="disc-text">Advisory index only. Not an official emergency warning or evacuation order. Comply with local civil defense bulletins.</span>
+          <span class="disc-text"><strong>NON-EMERGENCY NOTICE:</strong> Advisory triage indicator synthesized from satellite radiometry and weather reanalysis. It is NOT an operational emergency warning or evacuation dispatch system. Always comply with official local emergency authorities.</span>
         </div>
       </div>
 
@@ -755,7 +763,7 @@
         <!-- Satellite Penetration & Cloud Obscuration Card -->
         <div class="cloud-obscuration-card">
           <div class="cloud-header">
-            <span class="cloud-title">Cloud Mask & Multi-Sensor Defense</span>
+            <span class="cloud-title">Satellite Penetration & Cloud Mask</span>
             <span class="cloud-badge clear" id="cloudStatusBadge">CLEAR</span>
           </div>
           <div class="cloud-metrics-row">
@@ -764,7 +772,7 @@
               <span class="cloud-stat-val" id="cloudCoverVal">0%</span>
             </div>
             <div class="cloud-stat">
-              <span class="cloud-stat-label">Smoke Pen. (MWIR):</span>
+              <span class="cloud-stat-label">MWIR Smoke Pen.:</span>
               <span class="cloud-stat-val text-emerald" id="smokePenVal">98.5% (Transparent)</span>
             </div>
           </div>
@@ -773,11 +781,6 @@
           </div>
           <div class="cloud-condition-text" id="cloudConditionText">
             Optimal MWIR & thermal surface detection active.
-          </div>
-          <div class="cloud-defense-chips">
-            <span class="defense-chip" title="Sentinel-1 C-Band (5.6cm) SAR Radar penetrates opaque clouds">📡 SAR Radar: All-Weather</span>
-            <span class="defense-chip" title="GOES/Himawari 30-sec meso-scans catch transient cloud gaps">⚡ Geostationary: 30s Rapid</span>
-            <span class="defense-chip" title="Sentinel-5P TROPOMI detects CO/NO2 plumes lofted above clouds">🧪 TROPOMI: Gas Plumes</span>
           </div>
           <div class="cloud-subnote">
             Multi-satellite constellation (NOAA-20, NOAA-21, Suomi-NPP, MODIS Terra & Aqua) providing 6–8 daily passes for cloud-gap revisit.

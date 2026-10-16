@@ -20,8 +20,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("neurora.main")
 
 app = FastAPI(
-    title="Neurora — AI-Powered Worldwide Fire Monitoring & Forecasting System",
-    description="Real-world satellite hotspot observation, explainable fire risk assessment, and chronological next-day count forecasting.",
+    title="Neurora — Fire Detection Triage Dashboard",
+    description="Real-world satellite hotspot observation triage, explainable fire risk assessment, and chronological next-day count forecasting (Non-Emergency Analytical Dashboard).",
     version=settings.VERSION
 )
 
@@ -68,6 +68,7 @@ def get_health():
 def get_hotspots(
     satellite: Optional[str] = Query(None, description="Filter by satellite platform or product key"),
     confidence: Optional[str] = Query(None, description="'low', 'nominal', or 'high'"),
+    priority: Optional[str] = Query(None, description="Filter by review priority: 'high', 'medium', or 'low'"),
     min_frp: Optional[float] = Query(None, description="Minimum Fire Radiative Power in MW"),
     min_lat: Optional[float] = Query(None),
     max_lat: Optional[float] = Query(None),
@@ -79,6 +80,8 @@ def get_hotspots(
     """
     Fetches real satellite active-fire detections with multi-sensor support:
     VIIRS NOAA-20, NOAA-21, Suomi-NPP, and MODIS Terra/Aqua.
+    Ranked by triage priority (recency, confidence, FRP, repeat detections)
+    with per-detection explanation breakdown.
     """
     products = None
     if satellite:
@@ -104,6 +107,15 @@ def get_hotspots(
         max_points=limit,
         force_refresh=refresh
     )
+
+    if priority and "hotspots" in data:
+        p_clean = priority.strip().upper()
+        data["hotspots"] = [
+            h for h in data["hotspots"]
+            if h.get("triage_tier") == p_clean or p_clean in h.get("triage_priority", "").upper()
+        ]
+        data["metadata"]["returned_detections"] = len(data["hotspots"])
+
     return data
 
 @app.get("/api/hotspots/summary")

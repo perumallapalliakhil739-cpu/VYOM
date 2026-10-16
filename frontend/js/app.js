@@ -12,6 +12,13 @@ const App = {
     name: 'Brazil (Amazon / Cerrado Biome)'
   },
   searchDebounceTimer: null,
+  rawHotspots: [],
+  triageFilters: {
+    priority: 'ALL',
+    onlyRepeats: false,
+    sort: 'rank',
+    search: ''
+  },
 
   async init() {
     Charts.init();
@@ -142,6 +149,44 @@ const App = {
       btnRefresh.addEventListener('click', () => this.refreshAllData());
     }
 
+    // Triage Priority Filter Buttons
+    const triageBtns = document.querySelectorAll('#triagePriorityFilter .triage-pill-btn');
+    triageBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        triageBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.triageFilters.priority = btn.dataset.priority;
+        this.renderRankedTriageTable();
+      });
+    });
+
+    // Triage Repeat Clusters Only Checkbox
+    const chkOnlyRepeats = document.getElementById('chkOnlyRepeats');
+    if (chkOnlyRepeats) {
+      chkOnlyRepeats.addEventListener('change', (e) => {
+        this.triageFilters.onlyRepeats = e.target.checked;
+        this.renderRankedTriageTable();
+      });
+    }
+
+    // Triage Sort Dropdown
+    const sortSelect = document.getElementById('triageSortSelect');
+    if (sortSelect) {
+      sortSelect.addEventListener('change', (e) => {
+        this.triageFilters.sort = e.target.value;
+        this.renderRankedTriageTable();
+      });
+    }
+
+    // Triage Table Instant Search
+    const triageSearch = document.getElementById('triageTableSearchInput');
+    if (triageSearch) {
+      triageSearch.addEventListener('input', (e) => {
+        this.triageFilters.search = e.target.value;
+        this.renderRankedTriageTable();
+      });
+    }
+
     // Lower Tab Switching
     const tabButtons = document.querySelectorAll('.tab-btn');
     tabButtons.forEach(btn => {
@@ -191,12 +236,14 @@ const App = {
   async loadInitialData() {
     this.showLoadingFreshness('Fetching Real Satellite Feeds...');
 
-    // 1. Fetch Hotspots
+    // 1. Fetch Hotspots with Triage Rankings
     const hotspotsResponse = await API.getHotspots({ limit: 8000 });
     if (hotspotsResponse) {
+      this.rawHotspots = hotspotsResponse.hotspots || [];
       this.updateSummaryMetrics(hotspotsResponse);
-      MapController.setHotspots(hotspotsResponse.hotspots);
-      this.populateHotspotsTable(hotspotsResponse.hotspots.slice(0, 50));
+      MapController.setHotspots(this.rawHotspots);
+      this.renderRankedTriageTable();
+      this.updateTriageToolbarCounters();
     }
 
     // 2. Load Selected Location Analysis (default: Amazon / Cerrado high fire-activity region)
@@ -215,9 +262,11 @@ const App = {
 
     const hotspotsResponse = await API.getHotspots({ limit: 8000, refresh: true });
     if (hotspotsResponse) {
+      this.rawHotspots = hotspotsResponse.hotspots || [];
       this.updateSummaryMetrics(hotspotsResponse);
-      MapController.setHotspots(hotspotsResponse.hotspots);
-      this.populateHotspotsTable(hotspotsResponse.hotspots.slice(0, 50));
+      MapController.setHotspots(this.rawHotspots);
+      this.renderRankedTriageTable();
+      this.updateTriageToolbarCounters();
     }
 
     await this.inspectLocation(this.selectedLocation.lat, this.selectedLocation.lon, this.selectedLocation.name);
@@ -225,6 +274,24 @@ const App = {
 
     if (btn) btn.classList.remove('spinning');
     this.showFreshnessSynced();
+  },
+
+  updateTriageToolbarCounters() {
+    if (!this.rawHotspots) return;
+    const high = this.rawHotspots.filter(r => r.triage_tier === 'HIGH').length;
+    const med = this.rawHotspots.filter(r => r.triage_tier === 'MEDIUM').length;
+    const low = this.rawHotspots.filter(r => r.triage_tier === 'LOW').length;
+    const clusters = this.rawHotspots.filter(r => (r.repeat_count || 0) > 0).length;
+
+    const elH = document.getElementById('countHighPriority');
+    const elM = document.getElementById('countMedPriority');
+    const elL = document.getElementById('countLowPriority');
+    const elC = document.getElementById('countClusterOnly');
+
+    if (elH) elH.innerText = high.toLocaleString();
+    if (elM) elM.innerText = med.toLocaleString();
+    if (elL) elL.innerText = low.toLocaleString();
+    if (elC) elC.innerText = clusters.toLocaleString();
   },
 
   switchMode(mode) {
@@ -288,55 +355,33 @@ const App = {
     await this.loadForecastAndSeries(geoId);
   },
 
-  cleanToEnglish(text) {
-    if (!text) return '';
-    return String(text)
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\x20-\x7E]/g, '')
-      .trim();
-  },
-
   async handleLocationClick(lat, lon) {
     // Reverse geocode clicked coordinates
     const geo = await API.reverseGeocode(lat, lon);
-    const rawName = geo.display_name || `Coordinates ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
-    const locName = this.cleanToEnglish(rawName) || `Coordinates ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
-    this.selectedLocation = { lat, lon, name: locName, geo };
-    await this.inspectLocation(lat, lon, locName, geo);
+    const locName = geo.display_name || `Coordinates ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+    this.selectedLocation = { lat, lon, name: locName };
+    await this.inspectLocation(lat, lon, locName);
   },
 
-  async inspectLocation(lat, lon, name, geo = null) {
-    // Update location card strictly in English
+  async inspectLocation(lat, lon, name) {
+    // Update location card
     const nameEl = document.getElementById('selectedLocName');
     const coordsEl = document.getElementById('selectedLocCoords');
     const adminEl = document.getElementById('selectedLocAdmin');
+    const resolvedBadge = document.getElementById('locResolvedBadge');
 
-    const cleanName = this.cleanToEnglish(name) || `Coordinates ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
-    if (nameEl) nameEl.innerText = cleanName;
+    if (nameEl) nameEl.innerText = name;
     if (coordsEl) coordsEl.innerText = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
-    
-    if (adminEl) {
-      if (geo && (geo.city || geo.state || geo.country)) {
-        const parts = [
-          this.cleanToEnglish(geo.city),
-          this.cleanToEnglish(geo.state),
-          this.cleanToEnglish(geo.country)
-        ].filter(Boolean);
-        adminEl.innerText = parts.join(' • ') || 'Global Observation Grid';
-      } else {
-        adminEl.innerText = 'Global Observation Grid';
-      }
-    }
+    if (adminEl) adminEl.innerText = `Analyzing local meteorological & satellite parameters...`;
 
     // 1. Fetch live Open-Meteo Weather
-    const weather = await API.getWeather(lat, lon, cleanName);
+    const weather = await API.getWeather(lat, lon, name);
     if (weather) {
       this.updateWeatherUI(weather);
     }
 
     // 2. Fetch explainable fire risk
-    const risk = await API.getRisk(lat, lon, cleanName);
+    const risk = await API.getRisk(lat, lon, name);
     if (risk) {
       this.updateRiskUI(risk);
     }
@@ -462,7 +507,8 @@ const App = {
   updateRiskUI(riskData) {
     const score = riskData.score || 0;
     const level = riskData.alert_level || 'GREEN';
-    const title = riskData.alert_title || 'GREEN — LOW RISK';
+    const title = riskData.alert_title || (level === 'RED' ? 'High review priority' : level === 'ORANGE' ? 'Medium review priority' : 'Low review priority');
+    const priorityLabel = riskData.review_priority || title;
     const factors = riskData.factors || {};
 
     // Metric card update
@@ -472,12 +518,12 @@ const App = {
     const cardLoc = document.getElementById('metricRiskLocation');
 
     if (cardLevel) {
-      cardLevel.innerText = level;
+      cardLevel.innerText = level === 'RED' ? 'High' : level === 'ORANGE' ? 'Medium' : 'Low';
       cardLevel.className = `metric-number text-${level === 'RED' ? 'red' : level === 'ORANGE' ? 'amber' : 'emerald'}`;
     }
     if (cardScore) cardScore.innerText = `Score: ${score}/100`;
     if (cardBadge) {
-      cardBadge.innerText = `${level} Alert`;
+      cardBadge.innerText = priorityLabel;
       cardBadge.className = `metric-badge ${level.toLowerCase()}`;
     }
     if (cardLoc) cardLoc.innerHTML = `<span>Location: ${riskData.location_name || 'Selected'}</span>`;
@@ -492,7 +538,7 @@ const App = {
 
     const lvlLower = level.toLowerCase();
     if (riskPill) {
-      riskPill.innerText = level;
+      riskPill.innerText = priorityLabel;
       riskPill.className = `alert-status-pill ${lvlLower}`;
     }
     if (alertBanner) {
@@ -599,79 +645,159 @@ const App = {
   },
 
   populateHotspotsTable(records) {
+    if (records) this.rawHotspots = records;
+    this.renderRankedTriageTable();
+  },
+
+  renderRankedTriageTable() {
     const tbody = document.getElementById('hotspotsTableBody');
     const countBadge = document.getElementById('tableCountBadge');
     if (!tbody) return;
 
-    if (countBadge) countBadge.innerText = `${records.length} ranked observations`;
-
-    if (!records || records.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="10" class="loading-td">No satellite detections matching filter criteria.</td></tr>`;
+    if (!this.rawHotspots || this.rawHotspots.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="11" class="loading-td">No satellite detections available.</td></tr>`;
+      if (countBadge) countBadge.innerText = '0 records';
       return;
     }
 
-    let rowsHtml = '';
-    records.forEach((r, idx) => {
-      const rankNum = r.rank || (idx + 1);
-      const tier = (r.priority_tier || 'MODERATE').toUpperCase();
-      const tierClass = tier.toLowerCase();
-      const score = typeof r.ranking_score === 'number' ? r.ranking_score.toFixed(1) : (r.frp_mw ? Math.min(99, Math.round(r.frp_mw)).toString() : '50.0');
-      const repeats = r.repeat_detections || 1;
-      const explanation = r.ranking_explanation || `Ranked ${tierClass} because: ${r.observation_age_hours ? r.observation_age_hours + 'h ago' : 'recent pass'}, FRP ${r.frp_mw || 0} MW, ${repeats} repeat detections, ${r.confidence_raw} confidence`;
-      
-      const scoreColor = tier === 'CRITICAL' ? '#EF4444' : (tier === 'HIGH' ? '#F97316' : (tier === 'ELEVATED' ? '#F59E0B' : (tier === 'MODERATE' ? '#06B6D4' : '#64748B')));
+    let list = [...this.rawHotspots];
 
-      rowsHtml += `
-        <tr>
+    // Priority filter (ALL, HIGH, MEDIUM, LOW)
+    if (this.triageFilters.priority && this.triageFilters.priority !== 'ALL') {
+      list = list.filter(r => r.triage_tier === this.triageFilters.priority);
+    }
+
+    // Only multi-detection clusters (repeats > 0)
+    if (this.triageFilters.onlyRepeats) {
+      list = list.filter(r => (r.repeat_count || 0) > 0);
+    }
+
+    // Search query filter
+    if (this.triageFilters.search && this.triageFilters.search.trim().length > 0) {
+      const q = this.triageFilters.search.trim().toLowerCase();
+      list = list.filter(r => {
+        return (
+          (r.satellite && r.satellite.toLowerCase().includes(q)) ||
+          (r.instrument && r.instrument.toLowerCase().includes(q)) ||
+          (r.acq_date && r.acq_date.toLowerCase().includes(q)) ||
+          (r.triage_explanation && r.triage_explanation.toLowerCase().includes(q)) ||
+          String(r.latitude).includes(q) ||
+          String(r.longitude).includes(q)
+        );
+      });
+    }
+
+    // Sorting
+    if (this.triageFilters.sort === 'frp') {
+      list.sort((a, b) => (b.frp_mw || 0) - (a.frp_mw || 0));
+    } else if (this.triageFilters.sort === 'recency') {
+      list.sort((a, b) => (a.observation_age_hours || 0) - (b.observation_age_hours || 0));
+    } else if (this.triageFilters.sort === 'repeats') {
+      list.sort((a, b) => (b.repeat_count || 0) - (a.repeat_count || 0));
+    } else {
+      // Default: triage rank (composite score)
+      list.sort((a, b) => (a.triage_rank || 0) - (b.triage_rank || 0));
+    }
+
+    if (countBadge) {
+      countBadge.innerText = `${list.length.toLocaleString()} of ${this.rawHotspots.length.toLocaleString()} ranked detections`;
+    }
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="11" class="loading-td">No satellite observations match current triage filters.</td></tr>`;
+      return;
+    }
+
+    // Render top 120 rows for high responsiveness
+    const slice = list.slice(0, 120);
+    let html = '';
+    slice.forEach(r => {
+      const tier = (r.triage_tier || 'LOW').toLowerCase();
+      const priorityLabel = r.triage_priority || 'Low review priority';
+      const ageHours = r.observation_age_hours !== undefined ? r.observation_age_hours : 0;
+      const ageStr = ageHours <= 1.0 ? '<1h ago' : `${ageHours.toFixed(1)}h ago`;
+      const repeats = r.repeat_count || 0;
+      const explanation = r.triage_explanation || 'Satellite thermal observation.';
+
+      html += `
+        <tr class="triage-row triage-${tier}">
           <td>
-            <div class="rank-badge-cell">
-              <span class="rank-num">#${rankNum}</span>
-              <span class="priority-pill ${tierClass}">${tier}</span>
-            </div>
+            <div class="rank-badge ${r.triage_rank <= 3 ? 'rank-top' : ''}">#${r.triage_rank}</div>
           </td>
           <td>
-            <div class="rank-score-wrap">
-              <span class="rank-score-val" style="color: ${scoreColor};">${score}</span>
-              <div class="rank-score-track">
-                <div class="rank-score-fill" style="width: ${Math.min(100, Math.max(5, parseFloat(score)))}%; background: ${scoreColor};"></div>
+            <span class="triage-priority-pill ${tier}">
+              <span class="pill-dot"></span> ${priorityLabel}
+            </span>
+          </td>
+          <td>
+            <div class="triage-score-cell">
+              <span class="score-number">${r.triage_score !== undefined ? r.triage_score : '--'}</span>
+              <div class="mini-score-bar">
+                <div class="mini-score-fill ${tier}" style="width: ${r.triage_score || 0}%"></div>
               </div>
             </div>
           </td>
           <td>
-            <div style="font-weight: 700; color: #F1F5F9;">${r.satellite}</div>
-            <div style="font-size: 11px; color: var(--text-dim);">${r.instrument} (${r.daynight})</div>
-          </td>
-          <td>
-            <div style="font-family: var(--font-mono); font-size: 11.5px;">${r.acq_date} ${r.acq_time}</div>
-            <div style="font-size: 11px; color: #38BDF8;">${r.observation_age_hours !== undefined ? r.observation_age_hours + 'h ago' : 'Recent'}</div>
-          </td>
-          <td>
-            <div style="font-family: var(--font-mono); font-size: 11px; color: #94A3B8;">${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}</div>
-          </td>
-          <td>
-            <span style="font-weight: 800; font-family: var(--font-mono); color: #F59E0B;">${r.frp_mw !== null && r.frp_mw !== undefined ? r.frp_mw : '--'}</span>
-          </td>
-          <td>
-            <span style="font-size: 11.5px; text-transform: capitalize;">${r.confidence_raw}</span>
-          </td>
-          <td>
-            <span class="repeat-count-badge ${repeats === 1 ? 'single' : ''}">
-              ${repeats > 1 ? '🔁 ' + repeats + ' repeats' : '1 detection'}
-            </span>
-          </td>
-          <td class="ranking-explanation-cell">
-            <div class="explanation-box tier-${tierClass}">
-              ${explanation}
+            <div class="triage-explanation-wrapper">
+              <div class="explanation-main-text">
+                <strong>${explanation}</strong>
+              </div>
+              <div class="triage-driver-chips">
+                <span class="driver-chip chip-time" title="Observation Recency">⚡ ${ageStr}</span>
+                <span class="driver-chip chip-frp" title="Fire Radiative Power">🔥 ${r.frp_mw || 0} MW</span>
+                <span class="driver-chip chip-repeat ${repeats > 0 ? 'active' : ''}" title="Repeat Detections in 8km vicinity">🔁 ${repeats} repeat${repeats === 1 ? '' : 's'}</span>
+                <span class="driver-chip chip-conf" title="Sensor Confidence">✓ ${r.confidence_norm} conf</span>
+              </div>
             </div>
           </td>
           <td>
-            <button class="btn-sm" onclick="App.handleLocationClick(${r.latitude}, ${r.longitude})">Inspect</button>
+            <div class="time-primary"><strong>${r.acq_time}</strong> <span class="text-dim">UTC</span></div>
+            <div class="time-secondary text-dim">${ageStr} • ${r.acq_date}</div>
+          </td>
+          <td>
+            <strong class="text-amber">${r.frp_mw !== undefined ? r.frp_mw.toFixed(1) : '--'}</strong>
+            <span class="text-dim"> MW</span>
+          </td>
+          <td>
+            <span class="repeat-count-tag ${repeats >= 3 ? 'high-rep' : repeats >= 1 ? 'cluster-rep' : 'isolated-rep'}">
+              ${repeats > 0 ? `${repeats} in 8km` : '0 (isolated)'}
+            </span>
+          </td>
+          <td>
+            <span class="conf-badge conf-${r.confidence_norm}">
+              ${(r.confidence_norm || 'NOMINAL').toUpperCase()}
+            </span>
+          </td>
+          <td>
+            <div class="sat-name"><strong>${r.satellite}</strong></div>
+            <div class="sat-sub text-dim">${r.instrument} (${r.daynight})</div>
+          </td>
+          <td>
+            <span class="coords-mono">${r.latitude.toFixed(4)}°, ${r.longitude.toFixed(4)}°</span>
+          </td>
+          <td>
+            <button class="btn-sm btn-inspect-triage" onclick="App.inspectAndFocusDetection('${r.id}')" title="Inspect on map and assess weather">
+              Inspect
+            </button>
           </td>
         </tr>
       `;
     });
 
-    tbody.innerHTML = rowsHtml;
+    tbody.innerHTML = html;
+  },
+
+  inspectAndFocusDetection(id) {
+    const r = this.rawHotspots.find(x => x.id === id);
+    if (!r) return;
+
+    MapController.focusHotspot(r.latitude, r.longitude, r);
+    this.handleLocationClick(r.latitude, r.longitude);
+
+    const mapCard = document.querySelector('.map-card');
+    if (mapCard) {
+      mapCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   },
 
   async handleSearch(query) {

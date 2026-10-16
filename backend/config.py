@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 class Settings:
-    PROJECT_NAME: str = "Neurora — AI-Powered Worldwide Fire Monitoring & Forecasting System"
+    PROJECT_NAME: str = "Neurora — Fire Detection Triage Dashboard"
     VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1")
     PORT: int = int(os.getenv("PORT", "8000"))

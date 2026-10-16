@@ -20,6 +20,7 @@ const API = {
     const query = new URLSearchParams();
     if (params.satellite && params.satellite !== 'ALL') query.append('satellite', params.satellite);
     if (params.confidence) query.append('confidence', params.confidence);
+    if (params.priority) query.append('priority', params.priority);
     if (params.min_frp) query.append('min_frp', params.min_frp);
     if (params.limit) query.append('limit', params.limit);
     if (params.refresh) query.append('refresh', 'true');
