@@ -140,11 +140,14 @@ class WeatherService:
                                 {"satellite": "MODIS Terra", "orbit": "Sun-synchronous polar morning", "local_time": "~10:30 / 22:30"},
                                 {"satellite": "MODIS Aqua", "orbit": "Sun-synchronous polar afternoon", "local_time": "~13:30 / 01:30"}
                             ],
-                            "temporal_benefit": "Because clouds move continuously, staggered 5-satellite orbits observe the same location up to 6–8 times daily, detecting fire fronts during cloud-cover breaks."
+                            "temporal_benefit": "Because clouds move continuously, staggered 5-satellite orbits observe the same location up to 6–8 times daily, detecting fire fronts during cloud-cover breaks.",
+                            "geostationary_rapid_scan": "GOES-16/18 and Himawari-9 scan target sectors every 30-60 seconds, detecting fires instantly through fleeting 1-minute cloud rifts.",
+                            "atmospheric_gas_tracers": "Sentinel-5P TROPOMI tracks Carbon Monoxide (CO) and Nitrogen Dioxide (NO2) lofted into the upper atmosphere by Pyrocumulonimbus updrafts, locating masked fires beneath clouds.",
+                            "predictive_meteorological_continuity": "Neurora EFRI engine maintains continuous fire-danger forecasting using ground thermodynamic parameters even during total overcast."
                         },
                         "radar_and_microwave_horizon": {
                             "technology": "Synthetic Aperture Radar (SAR) & Microwave Radiometry (e.g., Sentinel-1 C-band 5.6cm, NISAR L-band 24cm)",
-                            "capability": "Centimeter-wavelength microwaves completely penetrate opaque clouds, rain, and darkness, enabling all-weather ground burn-scar and moisture detection."
+                            "capability": "Centimeter-wavelength microwaves completely penetrate opaque clouds, rain, and darkness, enabling all-weather ground burn-scar, moisture deficit, and perimeter detection."
                         }
                     },
                     "atmospheric_oxygen": {

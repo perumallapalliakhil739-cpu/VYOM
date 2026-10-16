@@ -76,13 +76,17 @@ class GeocodingService:
             time.sleep(1.0 - elapsed)
 
         url = "https://nominatim.openstreetmap.org/reverse"
-        headers = {"User-Agent": settings.USER_AGENT}
+        headers = {
+            "User-Agent": settings.USER_AGENT,
+            "Accept-Language": "en-US,en;q=0.9"
+        }
         params = {
             "lat": lat,
             "lon": lon,
             "format": "jsonv2",
             "zoom": 10,
-            "addressdetails": 1
+            "addressdetails": 1,
+            "accept-language": "en"
         }
 
         try:
@@ -115,7 +119,7 @@ class GeocodingService:
                         "state": state,
                         "latitude": lat,
                         "longitude": lon,
-                        "source": "live (Nominatim OSM)"
+                        "source": "live (Nominatim OSM English)"
                     }
         except Exception as e:
             logger.warning(f"Reverse geocode lookup failed: {e}")
@@ -134,7 +138,7 @@ class GeocodingService:
         }
 
     def search_location(self, query: str) -> List[Dict[str, Any]]:
-        """Search world location by text query (country, state, city, landmark)."""
+        """Search world location by text query (country, state, city, landmark) in English."""
         query_clean = query.strip()
         if not query_clean:
             return []
@@ -145,12 +149,16 @@ class GeocodingService:
             time.sleep(1.0 - elapsed)
 
         url = "https://nominatim.openstreetmap.org/search"
-        headers = {"User-Agent": settings.USER_AGENT}
+        headers = {
+            "User-Agent": settings.USER_AGENT,
+            "Accept-Language": "en-US,en;q=0.9"
+        }
         params = {
             "q": query_clean,
             "format": "jsonv2",
             "addressdetails": 1,
-            "limit": 5
+            "limit": 5,
+            "accept-language": "en"
         }
 
         try:

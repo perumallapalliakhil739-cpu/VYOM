@@ -533,7 +533,46 @@
                 </table>
               </div>
               <div class="science-footer-note">
-                <strong>All-Weather Microwave Horizon:</strong> Synthetic Aperture Radar (SAR, Sentinel-1 C-band 5.6cm & NISAR L-band 24cm) uses centimeter wavelengths that completely penetrate opaque clouds, rain, and darkness to monitor ground moisture and burn perimeters regardless of weather.
+                <strong>Temporal Gap Exploitation:</strong> Because clouds move continuously, staggered 5-satellite orbits observe the same location up to 6–8 times daily, detecting fire fronts during cloud-cover breaks.
+              </div>
+            </div>
+
+            <!-- Science Card 5: Synthetic Aperture Radar (SAR) All-Weather Penetration -->
+            <div class="science-card">
+              <div class="science-card-header">
+                <span class="science-icon">📡</span>
+                <h4 class="science-card-title">All-Weather SAR Radar & Microwave Penetration</h4>
+              </div>
+              <p class="science-desc">
+                When massive planetary cloud decks and monsoons completely blind optical and infrared sensors, spaceborne radar operates unimpeded:
+              </p>
+              <ul class="science-bullets">
+                <li><strong>Centimeter Radar Pulses:</strong> Sentinel-1 (C-Band, 5.6 cm) and NISAR (L-Band, 24 cm) use wavelengths 1,000 to 10,000 times larger than cloud water droplets, penetrating dense cloud decks, storm fronts, and darkness.</li>
+                <li><strong>Dielectric Backscatter Shift:</strong> As wildfires consume tree canopy and organic ground litter, radar backscatter drops sharply. Polarimetric decomposition (VV/VH) maps active burn perimeters under total cloud cover.</li>
+                <li><strong>Soil & Fuel Moisture:</strong> L-Band radar continuously monitors ground soil moisture deficit through clouds before ignition occurs.</li>
+              </ul>
+              <div class="science-footer-note">
+                <strong>Operational Status:</strong> European Space Agency (ESA) Sentinel-1 C-SAR & NASA/ISRO NISAR L/S-SAR radar pipelines active.
+              </div>
+            </div>
+
+            <!-- Science Card 6: Geostationary 30-Second Scans & Chemical Gas Tracers -->
+            <div class="science-card">
+              <div class="science-card-header">
+                <span class="science-icon">⚡</span>
+                <h4 class="science-card-title">Geostationary Rapid Scans & Gas Tracers</h4>
+              </div>
+              <p class="science-desc">
+                Two cutting-edge methodologies reveal wildfires concealed beneath cloud layers:
+              </p>
+              <ul class="science-bullets">
+                <li><strong>Geostationary 30-Second Meso-Scans:</strong> GOES-16/18 and Himawari-9 scan regional sectors every 30 to 60 seconds. Even a 90-second rift in moving clouds is instantly captured by the 3.9 µm MWIR channel.</li>
+                <li><strong>Pyrocumulonimbus (PyroCb) Updrafts:</strong> Intense fires produce powerful thermal plumes that punch through cloud ceilings into the upper troposphere.</li>
+                <li><strong>TROPOMI Chemical Tracing:</strong> Sentinel-5P spectrometers track elevated Carbon Monoxide (CO), Nitrogen Dioxide (NO₂), and Aerosol Index above cloud tops, verifying ground fires.</li>
+                <li><strong>Predictive EFRI Continuity:</strong> Neurora's meteorological risk engine computes ground thermodynamic risk uninterrupted during cloud cover.</li>
+              </ul>
+              <div class="science-footer-note">
+                <strong>Multi-Layer Resilience:</strong> The 6-tier defense ensures zero blind spots during prolonged global overcast events.
               </div>
             </div>
           </div>
@@ -713,7 +752,7 @@
         <!-- Satellite Penetration & Cloud Obscuration Card -->
         <div class="cloud-obscuration-card">
           <div class="cloud-header">
-            <span class="cloud-title">Satellite Penetration & Cloud Mask</span>
+            <span class="cloud-title">Cloud Mask & Multi-Sensor Defense</span>
             <span class="cloud-badge clear" id="cloudStatusBadge">CLEAR</span>
           </div>
           <div class="cloud-metrics-row">
@@ -722,7 +761,7 @@
               <span class="cloud-stat-val" id="cloudCoverVal">0%</span>
             </div>
             <div class="cloud-stat">
-              <span class="cloud-stat-label">MWIR Smoke Pen.:</span>
+              <span class="cloud-stat-label">Smoke Pen. (MWIR):</span>
               <span class="cloud-stat-val text-emerald" id="smokePenVal">98.5% (Transparent)</span>
             </div>
           </div>
@@ -731,6 +770,11 @@
           </div>
           <div class="cloud-condition-text" id="cloudConditionText">
             Optimal MWIR & thermal surface detection active.
+          </div>
+          <div class="cloud-defense-chips">
+            <span class="defense-chip" title="Sentinel-1 C-Band (5.6cm) SAR Radar penetrates opaque clouds">📡 SAR Radar: All-Weather</span>
+            <span class="defense-chip" title="GOES/Himawari 30-sec meso-scans catch transient cloud gaps">⚡ Geostationary: 30s Rapid</span>
+            <span class="defense-chip" title="Sentinel-5P TROPOMI detects CO/NO2 plumes lofted above clouds">🧪 TROPOMI: Gas Plumes</span>
           </div>
           <div class="cloud-subnote">
             Multi-satellite constellation (NOAA-20, NOAA-21, Suomi-NPP, MODIS Terra & Aqua) providing 6–8 daily passes for cloud-gap revisit.

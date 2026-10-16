@@ -1860,6 +1860,24 @@ h1, h2, h3, h4, .brand-name {
   line-height: 1.4;
 }
 
+.cloud-defense-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.defense-chip {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #38BDF8;
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 .cloud-subnote {
   font-size: 10px;
   color: var(--text-dim);
