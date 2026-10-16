@@ -288,33 +288,55 @@ const App = {
     await this.loadForecastAndSeries(geoId);
   },
 
+  cleanToEnglish(text) {
+    if (!text) return '';
+    return String(text)
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\x20-\x7E]/g, '')
+      .trim();
+  },
+
   async handleLocationClick(lat, lon) {
     // Reverse geocode clicked coordinates
     const geo = await API.reverseGeocode(lat, lon);
-    const locName = geo.display_name || `Coordinates ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
-    this.selectedLocation = { lat, lon, name: locName };
-    await this.inspectLocation(lat, lon, locName);
+    const rawName = geo.display_name || `Coordinates ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+    const locName = this.cleanToEnglish(rawName) || `Coordinates ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+    this.selectedLocation = { lat, lon, name: locName, geo };
+    await this.inspectLocation(lat, lon, locName, geo);
   },
 
-  async inspectLocation(lat, lon, name) {
-    // Update location card
+  async inspectLocation(lat, lon, name, geo = null) {
+    // Update location card strictly in English
     const nameEl = document.getElementById('selectedLocName');
     const coordsEl = document.getElementById('selectedLocCoords');
     const adminEl = document.getElementById('selectedLocAdmin');
-    const resolvedBadge = document.getElementById('locResolvedBadge');
 
-    if (nameEl) nameEl.innerText = name;
+    const cleanName = this.cleanToEnglish(name) || `Coordinates ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+    if (nameEl) nameEl.innerText = cleanName;
     if (coordsEl) coordsEl.innerText = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
-    if (adminEl) adminEl.innerText = `Analyzing local meteorological & satellite parameters...`;
+    
+    if (adminEl) {
+      if (geo && (geo.city || geo.state || geo.country)) {
+        const parts = [
+          this.cleanToEnglish(geo.city),
+          this.cleanToEnglish(geo.state),
+          this.cleanToEnglish(geo.country)
+        ].filter(Boolean);
+        adminEl.innerText = parts.join(' • ') || 'Global Observation Grid';
+      } else {
+        adminEl.innerText = 'Global Observation Grid';
+      }
+    }
 
     // 1. Fetch live Open-Meteo Weather
-    const weather = await API.getWeather(lat, lon, name);
+    const weather = await API.getWeather(lat, lon, cleanName);
     if (weather) {
       this.updateWeatherUI(weather);
     }
 
     // 2. Fetch explainable fire risk
-    const risk = await API.getRisk(lat, lon, name);
+    const risk = await API.getRisk(lat, lon, cleanName);
     if (risk) {
       this.updateRiskUI(risk);
     }
@@ -569,7 +591,7 @@ const App = {
     const countBadge = document.getElementById('tableCountBadge');
     if (!tbody) return;
 
-    if (countBadge) countBadge.innerText = `${records.length} sample detections`;
+    if (countBadge) countBadge.innerText = `${records.length} ranked observations`;
 
     if (!records || records.length === 0) {
       tbody.innerHTML = `<tr><td colspan="10" class="loading-td">No satellite detections matching filter criteria.</td></tr>`;
@@ -577,18 +599,59 @@ const App = {
     }
 
     let rowsHtml = '';
-    records.forEach(r => {
+    records.forEach((r, idx) => {
+      const rankNum = r.rank || (idx + 1);
+      const tier = (r.priority_tier || 'MODERATE').toUpperCase();
+      const tierClass = tier.toLowerCase();
+      const score = typeof r.ranking_score === 'number' ? r.ranking_score.toFixed(1) : (r.frp_mw ? Math.min(99, Math.round(r.frp_mw)).toString() : '50.0');
+      const repeats = r.repeat_detections || 1;
+      const explanation = r.ranking_explanation || `Ranked ${tierClass} because: ${r.observation_age_hours ? r.observation_age_hours + 'h ago' : 'recent pass'}, FRP ${r.frp_mw || 0} MW, ${repeats} repeat detections, ${r.confidence_raw} confidence`;
+      
+      const scoreColor = tier === 'CRITICAL' ? '#EF4444' : (tier === 'HIGH' ? '#F97316' : (tier === 'ELEVATED' ? '#F59E0B' : (tier === 'MODERATE' ? '#06B6D4' : '#64748B')));
+
       rowsHtml += `
         <tr>
-          <td><span style="font-weight:700;">${r.satellite}</span></td>
-          <td>${r.instrument}</td>
-          <td>${r.acq_date} ${r.acq_time}</td>
-          <td style="font-family: var(--font-mono);">${r.latitude.toFixed(4)}</td>
-          <td style="font-family: var(--font-mono);">${r.longitude.toFixed(4)}</td>
-          <td>${r.brightness_k ? r.brightness_k.toFixed(1) : '--'} K</td>
-          <td style="font-weight:700; color: #F59E0B;">${r.frp_mw || '--'}</td>
-          <td>${r.confidence_raw}</td>
-          <td>${r.daynight}</td>
+          <td>
+            <div class="rank-badge-cell">
+              <span class="rank-num">#${rankNum}</span>
+              <span class="priority-pill ${tierClass}">${tier}</span>
+            </div>
+          </td>
+          <td>
+            <div class="rank-score-wrap">
+              <span class="rank-score-val" style="color: ${scoreColor};">${score}</span>
+              <div class="rank-score-track">
+                <div class="rank-score-fill" style="width: ${Math.min(100, Math.max(5, parseFloat(score)))}%; background: ${scoreColor};"></div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div style="font-weight: 700; color: #F1F5F9;">${r.satellite}</div>
+            <div style="font-size: 11px; color: var(--text-dim);">${r.instrument} (${r.daynight})</div>
+          </td>
+          <td>
+            <div style="font-family: var(--font-mono); font-size: 11.5px;">${r.acq_date} ${r.acq_time}</div>
+            <div style="font-size: 11px; color: #38BDF8;">${r.observation_age_hours !== undefined ? r.observation_age_hours + 'h ago' : 'Recent'}</div>
+          </td>
+          <td>
+            <div style="font-family: var(--font-mono); font-size: 11px; color: #94A3B8;">${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}</div>
+          </td>
+          <td>
+            <span style="font-weight: 800; font-family: var(--font-mono); color: #F59E0B;">${r.frp_mw !== null && r.frp_mw !== undefined ? r.frp_mw : '--'}</span>
+          </td>
+          <td>
+            <span style="font-size: 11.5px; text-transform: capitalize;">${r.confidence_raw}</span>
+          </td>
+          <td>
+            <span class="repeat-count-badge ${repeats === 1 ? 'single' : ''}">
+              ${repeats > 1 ? '🔁 ' + repeats + ' repeats' : '1 detection'}
+            </span>
+          </td>
+          <td class="ranking-explanation-cell">
+            <div class="explanation-box tier-${tierClass}">
+              ${explanation}
+            </div>
+          </td>
           <td>
             <button class="btn-sm" onclick="App.handleLocationClick(${r.latitude}, ${r.longitude})">Inspect</button>
           </td>

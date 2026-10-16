@@ -104,7 +104,53 @@ $$\text{EFRI} = 0.65 \times (\text{WeatherBase} + \text{SynergyBoost}) + 0.35 \t
 
 ---
 
-## 6. Time-Series Forecasting Methodology
+## 6. Individual Observation Priority Ranking (OPR) & Per-Row Explanations
+
+In wildfire remote sensing, it is critical to distinguish between **location-level environmental risk** (which evaluates ambient weather and terrain conditions) and **individual observation priority** (which evaluates the severity, urgency, and reliability of each specific satellite detection).
+
+| Dimension | Scope | Primary Drivers | Purpose |
+| :--- | :--- | :--- | :--- |
+| **EFRI (Environmental Fire Risk)** | Location / Area | 65% Surface Weather & Fuel Deficit, 35% Spatial Thermal Context | Evaluates whether atmospheric conditions support fire spread at a coordinate. |
+| **OPR (Observation Priority Ranking)** | Individual Satellite Detection | 35% FRP, 25% Repeat Cluster Detections, 25% Observation Time Recency, 15% Confidence | Ranks every individual spaceborne observation to prioritize urgent response. |
+
+### The 4-Factor OPR Ranking Formula
+
+$$\text{OPR} = 0.35 \times S_{\text{frp}} + 0.25 \times S_{\text{repeat}} + 0.25 \times S_{\text{time}} + 0.15 \times S_{\text{conf}}$$
+
+1. **Fire Radiative Power (FRP — 35% weight):**  
+   $$S_{\text{frp}} = \min\left(100.0, \left(\frac{\text{FRP}}{50.0}\right)^{0.65} \times 100.0\right)$$  
+   Direct proxy for instantaneous biomass combustion rate. Higher MW output directly scales fire front intensity.
+
+2. **Repeat Detections in Spatial Cluster (25% weight):**  
+   $$S_{\text{repeat}} = \min(100.0, N_{\text{repeats}} \times 20.0)$$  
+   Spatial grouping across a $0.02^\circ$ ($\sim 2.2\,\text{km}$) spatial cell. Single isolated detections may represent temporary industrial flaring or surface glints; **multiple repeat detections across successive sensor passes confirm a persistent, expanding wildfire front**.
+
+3. **Observation Time Recency (25% weight):**  
+   $$S_{\text{time}} = \max\left(15.0, 100.0 - \frac{\text{Age}_{\text{hours}}}{24.0} \times 85.0\right)$$  
+   Fresh observations ($< 3$ hours) receive highest urgency; older passes ($18+$ hours) may have transitioned or been contained.
+
+4. **Algorithmic Confidence (15% weight):**  
+   Normalized from sensor quality flags (High $= 95$, Nominal $= 65$, Low $= 35$).
+
+### Priority Tiers & Explanations
+
+- **CRITICAL (Score $\ge 75$):** Severe active flame front, high FRP ($> 50$ MW), multiple repeat passes, recent satellite observation.
+- **HIGH (Score $60 - 74$):** High radiative output or confirmed persistent cluster with recent timestamp.
+- **ELEVATED (Score $45 - 59$):** Active anomaly with intermediate energy release or moderate cluster support.
+- **MODERATE (Score $30 - 44$):** Low-to-moderate thermal anomaly or older daytime overpass.
+- **LOW (Score $< 30$):** Isolated single detection with low FRP or older observation time.
+
+### Transparent Per-Row Breakdown in Dashboard
+Each row in the **Ranked Satellite Observations** table includes a direct, human-readable breakdown explaining why it achieved its position:
+> *“Ranked critical because: recent (3.3h ago), high FRP (699.5 MW), 4 repeat detections in cluster, high satellite confidence (high)”*  
+> *“Ranked moderate because: older pass (14.2h ago), moderate FRP (18.4 MW), isolated detection (1 repeat), nominal confidence”*
+
+### Strict English Geographic Naming
+All reverse geocoded coordinates, search queries, and selected location cards are filtered through Unicode NFKD Latin transliteration and ASCII normalization. Place names worldwide (e.g. in Asia, Africa, Eastern Europe, South America) are rendered strictly in English without localized or non-Latin script leakage.
+
+---
+
+## 7. Time-Series Forecasting Methodology
 
 The forecasting pipeline predicts **next-day satellite fire-detection counts**:
 - **Baseline Model:** Lag-1 persistence benchmark ($y_t = y_{t-1}$).
@@ -115,7 +161,7 @@ The forecasting pipeline predicts **next-day satellite fire-detection counts**:
 
 ---
 
-## 7. Installation & Quick Start
+## 8. Installation & Quick Start
 
 ### Prerequisites
 - Python 3.10+ (Tested on Python 3.14)
@@ -154,7 +200,7 @@ Open your browser at: **[http://localhost:8000](http://localhost:8000)**
 
 ---
 
-## 8. Exporting Data & Reproducible Notebooks
+## 9. Exporting Data & Reproducible Notebooks
 
 - **CSV Export:** `GET /api/export/csv` or via the dashboard "Export CSV" button.
 - **Parquet Export:** `GET /api/export/parquet` for fast analytical querying.
@@ -162,7 +208,7 @@ Open your browser at: **[http://localhost:8000](http://localhost:8000)**
 
 ---
 
-## 9. Data Provider Terms & Attributions
+## 10. Data Provider Terms & Attributions
 
 - **NASA FIRMS:** EOSDIS LANCE / LDOPE / SSEC. Real satellite active fire data.
 - **Esri & NASA:** Esri World Dark Gray Canvas, World Imagery, and NASA Black Marble (GIBS / EOSDIS).

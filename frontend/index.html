@@ -409,29 +409,29 @@
         <div class="tab-content" id="tabTable">
           <div class="tab-content-header">
             <div>
-              <h3 class="tab-title">Recent Satellite Detections</h3>
-              <p class="tab-subtitle" id="tableSubtitle">Displaying real satellite observations with source coordinates and attributes</p>
+              <h3 class="tab-title">Ranked Satellite Observations (Individual Priority Scoring)</h3>
+              <p class="tab-subtitle" id="tableSubtitle">Individual detections ranked by observation time recency, confidence, Fire Radiative Power (FRP), and spatial repeat cluster detections — with transparent per-observation explanations</p>
             </div>
             <div class="table-counts-badge" id="tableCountBadge">0 records</div>
           </div>
           <div class="table-responsive">
-            <table class="data-table" id="hotspotsTable">
+            <table class="data-table ranked-hotspots-table" id="hotspotsTable">
               <thead>
                 <tr>
+                  <th>Rank & Priority</th>
+                  <th>Priority Score</th>
                   <th>Satellite / Platform</th>
-                  <th>Instrument</th>
-                  <th>Date & Time (UTC)</th>
-                  <th>Latitude</th>
-                  <th>Longitude</th>
-                  <th>Brightness (K)</th>
+                  <th>Observation Time</th>
+                  <th>Coordinates</th>
                   <th>FRP (MW)</th>
                   <th>Confidence</th>
-                  <th>Day/Night</th>
+                  <th>Repeat Detections</th>
+                  <th>Why Ranked (Per-Row Explanation)</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody id="hotspotsTableBody">
-                <tr><td colspan="10" class="loading-td">Loading satellite observations...</td></tr>
+                <tr><td colspan="10" class="loading-td">Loading ranked satellite observations...</td></tr>
               </tbody>
             </table>
           </div>

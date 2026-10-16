@@ -3,6 +3,7 @@ import io
 import time
 import hashlib
 import logging
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -299,7 +300,63 @@ class FIRMSService:
         for r in all_records:
             unique_map[r["id"]] = r
         unique_records = list(unique_map.values())
-        unique_records.sort(key=lambda x: (x["frp_mw"] or 0.0), reverse=True)
+
+        # 1. Spatial clustering for repeat detections (~0.02 deg ~ 2.2 km cluster radius)
+        grid_counts = Counter((round(r["latitude"], 2), round(r["longitude"], 2)) for r in unique_records)
+
+        # 2. Score and rank individual observations by time, confidence, FRP, and repeat detections
+        for r in unique_records:
+            lat_r = round(r["latitude"], 2)
+            lon_r = round(r["longitude"], 2)
+            repeats = grid_counts.get((lat_r, lon_r), 1)
+
+            # Fire Radiative Power (35% weight)
+            frp = float(r.get("frp_mw") or 0.0)
+            s_frp = min(100.0, (frp / 50.0) ** 0.65 * 100.0)
+
+            # Repeat cluster persistence (25% weight)
+            s_repeat = min(100.0, repeats * 20.0)
+
+            # Time recency (25% weight)
+            age = max(0.0, float(r.get("observation_age_hours") or 0.0))
+            s_time = max(15.0, 100.0 - (age / 24.0) * 85.0)
+
+            # Algorithmic confidence (15% weight)
+            conf_norm = str(r.get("confidence_norm", "nominal")).lower()
+            raw_conf = str(r.get("confidence_raw", ""))
+            s_conf = 95.0 if conf_norm == "high" else (35.0 if conf_norm == "low" else 65.0)
+
+            # Observation Priority Ranking composite score (0 - 100)
+            ranking_score = round(0.35 * s_frp + 0.25 * s_repeat + 0.25 * s_time + 0.15 * s_conf, 1)
+
+            # Priority tier
+            if ranking_score >= 75:
+                tier = "CRITICAL"
+            elif ranking_score >= 60:
+                tier = "HIGH"
+            elif ranking_score >= 45:
+                tier = "ELEVATED"
+            elif ranking_score >= 30:
+                tier = "MODERATE"
+            else:
+                tier = "LOW"
+
+            time_str = f"recent ({age:.1f}h ago)" if age < 4 else (f"{age:.1f}h ago" if age < 12 else f"older pass ({age:.1f}h ago)")
+            frp_str = f"high FRP ({frp:.1f} MW)" if frp >= 40 else (f"moderate FRP ({frp:.1f} MW)" if frp >= 15 else f"low FRP ({frp:.1f} MW)")
+            rep_str = f"{repeats} repeat detections in cluster" if repeats > 1 else "isolated detection (1 repeat)"
+            conf_str = f"high satellite confidence ({raw_conf})" if conf_norm == "high" else f"{conf_norm} confidence"
+
+            explanation = f"Ranked {tier.lower()} because: {time_str}, {frp_str}, {rep_str}, {conf_str}"
+
+            r["ranking_score"] = ranking_score
+            r["priority_tier"] = tier
+            r["repeat_detections"] = repeats
+            r["ranking_explanation"] = explanation
+
+        # Strict sorting: highest priority observation (#1) first
+        unique_records.sort(key=lambda x: (x.get("ranking_score", 0.0), x.get("frp_mw", 0.0)), reverse=True)
+        for i, r in enumerate(unique_records, 1):
+            r["rank"] = i
 
         display_records = unique_records[:max_points]
         sampled = total_unique_count > len(display_records)
