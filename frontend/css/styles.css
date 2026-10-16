@@ -1610,3 +1610,283 @@ h1, h2, h3, h4, .brand-name {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Satellite Remote Sensing Science & Cloud Obscuration Styles
+   ========================================================================== */
+
+.science-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.science-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.science-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.science-icon {
+  font-size: 20px;
+}
+
+.science-card-title {
+  font-family: var(--font-title);
+  font-size: 14px;
+  font-weight: 700;
+  color: #F8FAFC;
+  margin: 0;
+}
+
+.science-desc {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.transmission-compare-box {
+  background: rgba(8, 14, 28, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.transmission-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trans-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-main);
+}
+
+.trans-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.trans-bar.blocked {
+  background: linear-gradient(90deg, #EF4444, #DC2626);
+  height: 100%;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+.trans-bar.clear {
+  background: linear-gradient(90deg, #10B981, #06B6D4);
+  height: 100%;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.formula-box {
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px dashed rgba(6, 182, 212, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  text-align: center;
+}
+
+.formula-latex {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: #38BDF8;
+  letter-spacing: 0.5px;
+}
+
+.science-bullets {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.science-bullets li {
+  margin-bottom: 4px;
+}
+
+.orbit-table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.orbit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.orbit-table th {
+  background: rgba(30, 41, 59, 0.7);
+  padding: 6px 10px;
+  color: var(--text-dim);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.orbit-table td {
+  padding: 6px 10px;
+  color: var(--text-main);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.science-footer-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.45;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--accent-cyan);
+}
+
+/* Cloud Obscuration Card in Sidebar */
+.cloud-obscuration-card {
+  margin-top: 12px;
+  background: rgba(13, 21, 38, 0.85);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cloud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cloud-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #CBD5E1;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cloud-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.cloud-badge.clear {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.cloud-badge.moderate {
+  background: rgba(245, 158, 11, 0.2);
+  color: #FBBF24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.cloud-badge.obscured {
+  background: rgba(239, 68, 68, 0.2);
+  color: #F87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.cloud-metrics-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+}
+
+.cloud-stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cloud-stat-label {
+  color: var(--text-dim);
+}
+
+.cloud-stat-val {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.cloud-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cloud-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #38BDF8, #94A3B8);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.cloud-condition-text {
+  font-size: 11px;
+  color: #94A3B8;
+  line-height: 1.4;
+}
+
+.cloud-subnote {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.35;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 6px;
+}
+
+/* Regional Risk Zone Anchor Badge Marker */
+.risk-zone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(8, 14, 28, 0.92);
+  border: 1.5px solid currentColor;
+  border-radius: 12px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.8), 0 0 6px currentColor;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.risk-zone-badge:hover {
+  transform: scale(1.08);
+}

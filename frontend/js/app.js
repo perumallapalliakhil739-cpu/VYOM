@@ -399,6 +399,30 @@ const App = {
     const oxyNote = document.getElementById('oxygenNote');
     if (oxyStatement) oxyStatement.innerText = oxygen.statement || "Oxygen measurement unavailable from the connected data sources.";
     if (oxyNote && oxygen.scientific_explanation) oxyNote.innerText = oxygen.scientific_explanation;
+
+    // Remote Sensing & Cloud Obscuration Status
+    const rs = wData.remote_sensing_analysis || {};
+    const elCloudVal = document.getElementById('cloudCoverVal');
+    const elCloudBadge = document.getElementById('cloudStatusBadge');
+    const elCloudBar = document.getElementById('cloudCoverBar');
+    const elCloudCond = document.getElementById('cloudConditionText');
+
+    const cloudPct = current.cloud_cover_pct !== undefined ? current.cloud_cover_pct : (rs.cloud_cover_pct || 0);
+    if (elCloudVal) elCloudVal.innerText = `${cloudPct}%`;
+    if (elCloudBar) elCloudBar.style.width = `${Math.min(100, Math.max(5, cloudPct))}%`;
+
+    const statusBadge = rs.cloud_status || (cloudPct < 25 ? 'CLEAR' : cloudPct < 70 ? 'MODERATE' : 'OBSCURED');
+    if (elCloudBadge) {
+      elCloudBadge.innerText = statusBadge;
+      elCloudBadge.className = `cloud-badge ${statusBadge.toLowerCase()}`;
+    }
+    if (elCloudCond) {
+      elCloudCond.innerText = rs.observation_condition || (
+        cloudPct < 25 ? "Optimal MWIR & thermal surface detection active." :
+        cloudPct < 70 ? "Partial Cloud Cover — Contextual Band Masking Active." :
+        "Dense Cloud Layer — Multi-Satellite Constellation Revisit Required."
+      );
+    }
   },
 
   updateRiskUI(riskData) {

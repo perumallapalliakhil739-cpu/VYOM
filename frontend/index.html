@@ -260,17 +260,17 @@
           </div>
 
           <div class="filter-group layer-toggles">
-            <label class="toggle-label" title="Cluster satellite markers at low zoom">
-              <input type="checkbox" id="chkCluster" checked>
-              <span>Cluster</span>
+            <label class="toggle-label" title="Continuous expanding thermal heat shade canopy">
+              <input type="checkbox" id="chkHeatmap" checked>
+              <span>🔥 Heat Shade</span>
             </label>
-            <label class="toggle-label" title="Show density heatmap overlay">
-              <input type="checkbox" id="chkHeatmap">
-              <span>Heatmap</span>
-            </label>
-            <label class="toggle-label" title="Show regional fire risk overlay">
+            <label class="toggle-label" title="Regional indicative fire risk zones">
               <input type="checkbox" id="chkRiskLayer" checked>
-              <span>Risk Zones</span>
+              <span>⚠️ Risk Zones</span>
+            </label>
+            <label class="toggle-label" title="Show individual pinpoint observation markers">
+              <input type="checkbox" id="chkCluster">
+              <span>📍 Pinpoint Markers</span>
             </label>
           </div>
 
@@ -317,6 +317,7 @@
           <button class="tab-btn active" data-tab="tabTimeSeries">Historical Daily Counts & Trends</button>
           <button class="tab-btn" data-tab="tabForecasting">Forecasting Model Evaluation (Chronological Held-Out)</button>
           <button class="tab-btn" data-tab="tabTable">Satellite Detections Table & Provenance</button>
+          <button class="tab-btn" data-tab="tabAtmosphericScience">🔬 Satellite Science & Cloud/Smoke Penetration</button>
         </div>
 
         <!-- Tab 1: Historical Time Series -->
@@ -433,6 +434,108 @@
                 <tr><td colspan="10" class="loading-td">Loading satellite observations...</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- Tab 4: Satellite Science & Cloud/Smoke Penetration -->
+        <div class="tab-content" id="tabAtmosphericScience">
+          <div class="tab-content-header">
+            <div>
+              <h3 class="tab-title">Remote Sensing Radiative Physics & Atmospheric Penetration</h3>
+              <p class="tab-subtitle">How spaceborne sensors detect active thermal hotspots through dense smoke and mitigate cloud cover</p>
+            </div>
+            <div class="eval-metrics-pill">
+              NASA FIRMS VIIRS & MODIS Science Protocols
+            </div>
+          </div>
+
+          <div class="science-grid">
+            <!-- Science Card 1: Smoke Penetration (Mie Scattering) -->
+            <div class="science-card">
+              <div class="science-card-header">
+                <span class="science-icon">💨</span>
+                <h4 class="science-card-title">Smoke Penetration & Mie Scattering Physics</h4>
+              </div>
+              <p class="science-desc">
+                Wildfire smoke is composed of microscopic aerosol droplets (0.1–0.8 µm) that severely scatter human visible light (0.4–0.7 µm). However, NASA's thermal sensors observe in the <strong>Mid-Wave Infrared (MWIR) at 3.7–4.0 µm</strong> (VIIRS Band I4 & MODIS Band 21/22).
+              </p>
+              <div class="transmission-compare-box">
+                <div class="transmission-row">
+                  <div class="trans-label"><span>Visible Light (0.5 µm):</span> <strong class="text-red">Blocked (~15% transmission)</strong></div>
+                  <div class="trans-track"><div class="trans-bar blocked" style="width: 15%;"></div></div>
+                </div>
+                <div class="transmission-row">
+                  <div class="trans-label"><span>Mid-Wave Infrared (3.9 µm):</span> <strong class="text-emerald">Transparent (~98.5% transmission)</strong></div>
+                  <div class="trans-track"><div class="trans-bar clear" style="width: 98.5%;"></div></div>
+                </div>
+              </div>
+              <div class="science-footer-note">
+                <strong>Wien's Displacement Law:</strong> Wildfires burn at 800–1200 K, placing their peak electromagnetic energy emission directly at 3.9 µm. Even small flames occupying just 0.01% of a 375m pixel elevate the MWIR temperature by tens of Kelvins above ambient ground.
+              </div>
+            </div>
+
+            <!-- Science Card 2: Dual-Band Contextual Differential Algorithm -->
+            <div class="science-card">
+              <div class="science-card-header">
+                <span class="science-icon">📐</span>
+                <h4 class="science-card-title">Dual-Band Contextual Algorithm (ΔT)</h4>
+              </div>
+              <p class="science-desc">
+                To prevent false positives from sun-warmed rocks or solar glint, satellites compute the contextual brightness temperature difference between the flame-sensitive 4 µm channel and the ambient 11 µm channel:
+              </p>
+              <div class="formula-box">
+                <span class="formula-latex">ΔT = T<sub>4µm</sub> - T<sub>11µm</sub></span>
+              </div>
+              <ul class="science-bullets">
+                <li><strong>Normal Terrain / Smoke:</strong> T<sub>4µm</sub> ≈ T<sub>11µm</sub> (ΔT is small, &lt; 5–8 K).</li>
+                <li><strong>Active Wildfire:</strong> T<sub>4µm</sub> surges drastically while T<sub>11µm</sub> only rises slightly (ΔT spikes &gt; 15–30 K).</li>
+                <li><strong>Adaptive Background Test:</strong> The candidate pixel is statistically tested against surrounding valid pixels to eliminate local temperature anomalies.</li>
+              </ul>
+            </div>
+
+            <!-- Science Card 3: Cloud Obscuration Protocol -->
+            <div class="science-card">
+              <div class="science-card-header">
+                <span class="science-icon">☁️</span>
+                <h4 class="science-card-title">Cloud Obscuration Protocol & Masking</h4>
+              </div>
+              <p class="science-desc">
+                Thick water/ice clouds contain droplets measuring 10–50 µm that physically absorb and scatter infrared radiation. Optical and IR satellites cannot see through dense stratus or storm clouds:
+              </p>
+              <ul class="science-bullets">
+                <li><strong>1.38 µm Cirrus Band:</strong> Strong water vapor absorption flags thin, high-altitude cirrus clouds that might distort thermal readings.</li>
+                <li><strong>Cloud-Mask Flagging:</strong> Pixels under dense cloud decks are marked as <code>Cloud-Obscured</code> in FIRMS rather than "No Fire", ensuring forecasting models do not misinterpret cloudy days as extinguished fires.</li>
+                <li><strong>Sub-Pixel Burn Scars:</strong> Post-fire thermal radiance and surface reflectance changes are verified as soon as cloud fronts pass.</li>
+              </ul>
+            </div>
+
+            <!-- Science Card 4: 5-Satellite Constellation Revisit Schedule -->
+            <div class="science-card">
+              <div class="science-card-header">
+                <span class="science-icon">🛰️</span>
+                <h4 class="science-card-title">Constellation Temporal Overpass Coverage</h4>
+              </div>
+              <p class="science-desc">
+                Clouds move constantly across the troposphere. By flying a synchronized 5-satellite polar constellation, Neurora monitors each ground location 6 to 8 times every 24 hours, detecting fires as clouds clear:
+              </p>
+              <div class="orbit-table-wrapper">
+                <table class="orbit-table">
+                  <thead>
+                    <tr><th>Satellite</th><th>Sensor</th><th>Nominal Local Overpasses</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><strong>NOAA-21</strong></td><td>VIIRS (375m)</td><td>~13:00 / 01:00 Local</td></tr>
+                    <tr><td><strong>Suomi-NPP</strong></td><td>VIIRS (375m)</td><td>~13:30 / 01:30 Local</td></tr>
+                    <tr><td><strong>NOAA-20</strong></td><td>VIIRS (375m)</td><td>~14:20 / 02:20 Local (50 min stagger)</td></tr>
+                    <tr><td><strong>MODIS Terra</strong></td><td>MODIS (1km)</td><td>~10:30 / 22:30 Local</td></tr>
+                    <tr><td><strong>MODIS Aqua</strong></td><td>MODIS (1km)</td><td>~13:30 / 01:30 Local</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="science-footer-note">
+                <strong>All-Weather Microwave Horizon:</strong> Synthetic Aperture Radar (SAR, Sentinel-1 C-band 5.6cm & NISAR L-band 24cm) uses centimeter wavelengths that completely penetrate opaque clouds, rain, and darkness to monitor ground moisture and burn perimeters regardless of weather.
+              </div>
+            </div>
           </div>
         </div>
 
@@ -604,6 +707,33 @@
           </div>
           <div class="oxygen-scientific-note" id="oxygenNote">
             Standard global meteorological station networks monitor tropospheric thermodynamic variables (temperature, vapor pressure, wind, precipitation) but do not record localized oxygen fluctuations. Ordinary atmospheric oxygen concentration (~20.95%) remains virtually uniform in the lower atmosphere globally and is not a direct predictor of wildfire ignition. Fire initiation and spread are governed by fuel moisture deficit, high temperature, wind velocity, and ignition sources.
+          </div>
+        </div>
+
+        <!-- Satellite Penetration & Cloud Obscuration Card -->
+        <div class="cloud-obscuration-card">
+          <div class="cloud-header">
+            <span class="cloud-title">Satellite Penetration & Cloud Mask</span>
+            <span class="cloud-badge clear" id="cloudStatusBadge">CLEAR</span>
+          </div>
+          <div class="cloud-metrics-row">
+            <div class="cloud-stat">
+              <span class="cloud-stat-label">Cloud Cover:</span>
+              <span class="cloud-stat-val" id="cloudCoverVal">0%</span>
+            </div>
+            <div class="cloud-stat">
+              <span class="cloud-stat-label">MWIR Smoke Pen.:</span>
+              <span class="cloud-stat-val text-emerald" id="smokePenVal">98.5% (Transparent)</span>
+            </div>
+          </div>
+          <div class="cloud-track">
+            <div class="cloud-bar" id="cloudCoverBar" style="width: 5%;"></div>
+          </div>
+          <div class="cloud-condition-text" id="cloudConditionText">
+            Optimal MWIR & thermal surface detection active.
+          </div>
+          <div class="cloud-subnote">
+            Multi-satellite constellation (NOAA-20, NOAA-21, Suomi-NPP, MODIS Terra & Aqua) providing 6–8 daily passes for cloud-gap revisit.
           </div>
         </div>
       </div>

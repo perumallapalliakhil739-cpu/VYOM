@@ -12,12 +12,13 @@ const MapController = {
   clickPinMarker: null,
 
   // Current active data & filters
+  // Current active data & filters
   hotspotsData: [],
   currentSatelliteFilter: 'ALL',
   currentConfidenceFilter: '',
   currentMinFrp: 0,
-  showCluster: true,
-  showHeatmap: false,
+  showCluster: false,
+  showHeatmap: true,
   showRiskLayer: true,
 
   // Selected Location Callback
@@ -71,8 +72,7 @@ const MapController = {
     });
     this.basemapLayers['satellite'] = L.layerGroup([satBase, satRef]);
 
-
-    // 5. OpenStreetMap Topographic / Terrain
+    // 4. OpenStreetMap Topographic / Terrain
     this.basemapLayers['terrain'] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
@@ -83,13 +83,14 @@ const MapController = {
     const mapEl = document.getElementById(containerId);
     if (mapEl) mapEl.classList.add('dark-canvas-active');
 
-    // Initialize Layers
+    // Initialize Layers (disable spiderfy fragmentation)
     this.markersClusterGroup = L.markerClusterGroup({
       chunkedLoading: true,
-      maxClusterRadius: 45,
-      spiderfyOnMaxZoom: true,
+      maxClusterRadius: 40,
+      spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
       zoomToBoundsOnClick: true,
+      disableClusteringAtZoom: 12,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         let cClass = 'marker-cluster-small';
@@ -113,6 +114,11 @@ const MapController = {
       this.map.addLayer(this.riskLayerGroup);
     }
 
+    // Zoom listener for dynamic smooth expanding heat canopy
+    this.map.on('zoomend', () => {
+      this.updateHeatmapForZoom();
+    });
+
     // Map Event Listeners
     this.map.on('mousemove', (e) => {
       const lat = e.latlng.lat.toFixed(4);
@@ -127,6 +133,23 @@ const MapController = {
 
     // Populate default regional risk zones
     this.renderRegionalRiskZones();
+  },
+
+  updateHeatmapForZoom() {
+    if (!this.heatmapLayer || !this.map) return;
+    const zoom = this.map.getZoom();
+    // Dynamically expand thermal canopy radius as user zooms in:
+    // Zoom 2: 18px radius, 14px blur
+    // Zoom 5: 28px radius, 22px blur
+    // Zoom 8: 42px radius, 32px blur
+    // Zoom 11+: 60px radius, 44px blur
+    const radius = Math.min(68, Math.max(16, Math.round(14 + Math.pow(zoom, 1.35) * 1.6)));
+    const blur = Math.min(48, Math.max(12, Math.round(radius * 0.72)));
+    this.heatmapLayer.setOptions({
+      radius: radius,
+      blur: blur,
+      maxZoom: 16
+    });
   },
 
   setHotspots(hotspots) {
@@ -171,7 +194,6 @@ const MapController = {
       this.heatmapLayer = null;
     }
 
-    // 1. Render Cluster / Individual Markers
     const markers = [];
     const heatPoints = [];
 
@@ -180,41 +202,60 @@ const MapController = {
       const lon = pt.longitude;
       const color = this.getSatelliteColor(pt.satellite);
 
-      heatPoints.push([lat, lon, Math.min(1.0, (pt.frp_mw || 5) / 50.0)]);
+      // FRP weighted intensity for vibrant thermal canopy
+      const intensity = Math.min(1.0, Math.max(0.25, (pt.frp_mw || 10) / 40.0));
+      heatPoints.push([lat, lon, intensity]);
 
-      // Custom circle marker
-      const marker = L.circleMarker([lat, lon], {
-        radius: Math.max(3.5, Math.min(8.0, 3.5 + (pt.frp_mw || 0) / 40.0)),
-        fillColor: color,
-        color: '#FFFFFF',
-        weight: 1,
-        opacity: 0.9,
-        fillOpacity: 0.85
-      });
+      // Only build individual circle markers if pinpoint clustering is enabled
+      if (this.showCluster) {
+        const marker = L.circleMarker([lat, lon], {
+          radius: Math.max(3.5, Math.min(8.0, 3.5 + (pt.frp_mw || 0) / 40.0)),
+          fillColor: color,
+          color: '#FFFFFF',
+          weight: 1,
+          opacity: 0.9,
+          fillOpacity: 0.85
+        });
 
-      // Bind rich popup with UTC & Local Time
-      const popupHtml = this.createPopupHtml(pt);
-      marker.bindPopup(popupHtml, { maxWidth: 300 });
+        // Bind rich popup with UTC & Local Time
+        const popupHtml = this.createPopupHtml(pt);
+        marker.bindPopup(popupHtml, { maxWidth: 300 });
 
-      markers.push(marker);
+        markers.push(marker);
+      }
     });
 
-    this.markersClusterGroup.addLayers(markers);
-
-    // 2. Render Heatmap if toggled
+    // 1. Render Heat Shade (Expanding Continuous Canopy without breaking into pieces)
     if (this.showHeatmap && heatPoints.length > 0 && typeof L.heatLayer === 'function') {
+      const currentZoom = this.map.getZoom();
+      const radius = Math.min(68, Math.max(16, Math.round(14 + Math.pow(currentZoom, 1.35) * 1.6)));
+      const blur = Math.min(48, Math.max(12, Math.round(radius * 0.72)));
+
       this.heatmapLayer = L.heatLayer(heatPoints, {
-        radius: 20,
-        blur: 15,
-        maxZoom: 10,
+        radius: radius,
+        blur: blur,
+        maxZoom: 16,
+        minOpacity: 0.28,
         gradient: {
-          0.2: '#06B6D4',
-          0.4: '#38BDF8',
-          0.6: '#F59E0B',
-          0.8: '#F97316',
-          1.0: '#EF4444'
+          0.15: '#38BDF8', // Cyan ambient warm perimeter
+          0.35: '#F59E0B', // Amber active flame edge
+          0.60: '#F97316', // Orange burning front
+          0.82: '#EF4444', // Red high intensity core
+          0.98: '#FFFFFF'  // White-hot peak radiation
         }
       }).addTo(this.map);
+    }
+
+    // 2. Render Pinpoint Markers if toggled
+    if (this.showCluster) {
+      this.markersClusterGroup.addLayers(markers);
+      if (!this.map.hasLayer(this.markersClusterGroup)) {
+        this.map.addLayer(this.markersClusterGroup);
+      }
+    } else {
+      if (this.map.hasLayer(this.markersClusterGroup)) {
+        this.map.removeLayer(this.markersClusterGroup);
+      }
     }
   },
 
@@ -335,25 +376,55 @@ const MapController = {
     ];
 
     zones.forEach(z => {
-      const circle = L.circle([z.lat, z.lon], {
+      // 1. Outer alert perimeter (smooth broad shade)
+      const outerCircle = L.circle([z.lat, z.lon], {
         radius: z.radius,
         color: z.color,
         fillColor: z.color,
-        fillOpacity: 0.12,
-        weight: 1.5,
+        fillOpacity: 0.08,
+        weight: 1.2,
         dashArray: '4, 4'
       });
 
-      circle.bindTooltip(`
-        <strong>${z.name}</strong><br/>
-        Estimated Risk: <span style="color:${z.color};font-weight:700">${z.level} (${z.score}/100)</span>
-      `, { sticky: true, className: 'risk-tooltip' });
-
-      circle.on('click', () => {
-        this.handleMapClick(z.lat, z.lon);
+      // 2. Inner core intensity shade (expands smoothly when zooming in)
+      const innerCore = L.circle([z.lat, z.lon], {
+        radius: Math.round(z.radius * 0.45),
+        color: z.color,
+        fillColor: z.color,
+        fillOpacity: 0.18,
+        weight: 1.5
       });
 
-      this.riskLayerGroup.addLayer(circle);
+      // 3. Central anchor badge marker (always visible and clickable)
+      const badgeIcon = L.divIcon({
+        className: 'risk-badge-marker',
+        html: `
+          <div class="risk-zone-badge" style="border-color: ${z.color}; color: ${z.color};">
+            <span class="badge-dot" style="background: ${z.color};"></span>
+            <span>${z.level} ${z.score}</span>
+          </div>
+        `,
+        iconSize: [85, 24],
+        iconAnchor: [42, 12]
+      });
+      const badgeMarker = L.marker([z.lat, z.lon], { icon: badgeIcon });
+
+      const tooltipContent = `
+        <strong>${z.name}</strong><br/>
+        Estimated Risk: <span style="color:${z.color};font-weight:700">${z.level} (${z.score}/100)</span>
+      `;
+
+      outerCircle.bindTooltip(tooltipContent, { sticky: true, className: 'risk-tooltip' });
+      innerCore.bindTooltip(tooltipContent, { sticky: true, className: 'risk-tooltip' });
+      badgeMarker.bindTooltip(tooltipContent, { sticky: true, className: 'risk-tooltip' });
+
+      outerCircle.on('click', () => this.handleMapClick(z.lat, z.lon));
+      innerCore.on('click', () => this.handleMapClick(z.lat, z.lon));
+      badgeMarker.on('click', () => this.handleMapClick(z.lat, z.lon));
+
+      this.riskLayerGroup.addLayer(outerCircle);
+      this.riskLayerGroup.addLayer(innerCore);
+      this.riskLayerGroup.addLayer(badgeMarker);
     });
   },
 
