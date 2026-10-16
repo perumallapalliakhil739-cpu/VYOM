@@ -91,12 +91,14 @@ class TimeSeriesForecastingEngine:
 
         # 2. Alternative Model: Poisson Count Regressor
         # Poisson regression with scaled inputs for numerical stability
+        model_name = "Poisson regression"
         try:
             alt_model = PoissonRegressor(alpha=1e-2, max_iter=500, solver="lbfgs")
             alt_model.fit(X_train_scaled, y_train)
             y_pred_alt = alt_model.predict(X_test_scaled)
         except Exception as e:
             logger.warning(f"Poisson regression fallback to Ridge: {e}")
+            model_name = "Ridge regression fallback"
             alt_model = Ridge(alpha=1.0)
             alt_model.fit(X_train_scaled, y_train)
             y_pred_alt = np.clip(alt_model.predict(X_test_scaled), 0, None)
@@ -136,11 +138,6 @@ class TimeSeriesForecastingEngine:
         next_day_alt_raw = float(alt_model.predict(next_features_scaled)[0])
         next_day_alt = int(round(max(0.0, next_day_alt_raw)))
 
-        # Prediction intervals (80% confidence interval based on test residuals std)
-        residual_std = float(np.std(y_test - y_pred_alt))
-        lower_bound = max(0, int(round(next_day_alt - 1.28 * residual_std)))
-        upper_bound = int(round(next_day_alt + 1.28 * residual_std))
-
         # Recent timeline data for chart plotting
         recent_plot = []
         for _, r in test_df.tail(30).iterrows():
@@ -153,17 +150,26 @@ class TimeSeriesForecastingEngine:
             })
 
         # Transparent narrative explanation
-        if outperformed:
+        if alt_mae < baseline_mae:
             performance_narrative = (
-                f"The alternative Poisson regression model outperformed the baseline lag-1 persistence model "
-                f"on the chronologically held-out test set, reducing MAE by {mae_improvement_pct}% "
-                f"({alt_mae:.1f} vs {baseline_mae:.1f} detections)."
+                f"{model_name} had lower held-out MAE than lag-1 persistence: "
+                f"{alt_mae:.1f} vs {baseline_mae:.1f} detections ({mae_improvement_pct:.1f}% lower)."
             )
+        elif alt_mae > baseline_mae:
+            delta = alt_mae - baseline_mae
+            if baseline_mae > 0:
+                performance_narrative = (
+                    f"{model_name} did not beat lag-1 persistence on held-out MAE: "
+                    f"{alt_mae:.1f} vs {baseline_mae:.1f} detections ({delta / baseline_mae * 100:.1f}% higher)."
+                )
+            else:
+                performance_narrative = (
+                    f"{model_name} did not beat lag-1 persistence on held-out MAE: "
+                    f"{alt_mae:.1f} vs {baseline_mae:.1f} detections."
+                )
         else:
             performance_narrative = (
-                f"On this geographic unit, the baseline lag-1 model demonstrated comparable or superior stability "
-                f"(Baseline MAE: {baseline_mae:.1f} vs Alternative MAE: {alt_mae:.1f}). "
-                "In high-inertia count processes with rapid day-to-day weather shifts, persistence remains a formidable benchmark."
+                f"{model_name} and lag-1 persistence tied on held-out MAE at {alt_mae:.1f} detections."
             )
 
         return {
@@ -175,10 +181,7 @@ class TimeSeriesForecastingEngine:
                 "date": (pd.to_datetime(data["date"].iloc[-1]) + timedelta(days=1)).strftime("%Y-%m-%d"),
                 "alternative_prediction": next_day_alt,
                 "baseline_prediction": next_day_baseline,
-                "prediction_interval_80": {
-                    "lower": lower_bound,
-                    "upper": upper_bound
-                },
+                "model_name": model_name,
                 "latest_observed_count": int(latest_observed_count),
                 "trend_vs_yesterday": "Increasing" if next_day_alt > latest_observed_count else "Decreasing" if next_day_alt < latest_observed_count else "Stable"
             },
@@ -190,8 +193,8 @@ class TimeSeriesForecastingEngine:
                     "held_out_rmse": round(baseline_rmse, 2)
                 },
                 "alternative_model": {
-                    "name": "Regularized Poisson Count Regression",
-                    "description": "Log-linear model incorporating multi-day lags, cyclical seasonality, and surface meteorology",
+                    "name": model_name,
+                    "description": "Poisson regression using recent counts, seasonal terms, and surface meteorology" if model_name == "Poisson regression" else "Ridge regression fallback using the same input features",
                     "held_out_mae": round(alt_mae, 2),
                     "held_out_rmse": round(alt_rmse, 2)
                 },

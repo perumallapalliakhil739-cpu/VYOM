@@ -136,7 +136,7 @@ class EnvironmentalFireRiskEngine:
             )
             recommendations = [
                 "Prioritize continuous satellite overpass tracking (NOAA-20/21, Suomi-NPP, MODIS).",
-                "Verify thermal cluster persistence and repeat detections in surrounding 8km radius.",
+                "Verify thermal cluster persistence and repeat detections in surrounding 2km radius.",
                 "Review local relative humidity depression and wind gust trends.",
                 "Notice: For analytical screening only; not for tactical emergency dispatch or evacuation orders."
             ]

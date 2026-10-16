@@ -178,15 +178,15 @@
 
     <div class="metric-card">
       <div class="metric-header">
-        <span class="metric-title">NEXT-DAY FORECASTED COUNT</span>
-        <span class="metric-tag info">Poisson Model</span>
+        <span class="metric-title">NEXT-DAY COUNT ESTIMATE</span>
+        <span class="metric-tag info" id="metricForecastModel">Poisson regression</span>
       </div>
       <div class="metric-value-row">
         <span class="metric-number" id="metricForecastCount">--</span>
         <span class="metric-sub" id="metricForecastTrend">--</span>
       </div>
       <div class="metric-footer">
-        <span class="footer-label">Baseline Persist:</span>
+        <span class="footer-label">Lag-1 estimate:</span>
         <span class="footer-val" id="metricBaselineCount">--</span>
       </div>
     </div>
@@ -383,8 +383,8 @@
 
             <div class="comparison-card highlight-border">
               <div class="comp-badge alternative">Alternative Model</div>
-              <div class="comp-name">Regularized Poisson Count Regression</div>
-              <div class="comp-desc">Log-linear count model with multi-day lags, cyclical seasonality, and surface meteorology</div>
+              <div class="comp-name" id="evalAltModelName">Poisson regression</div>
+              <div class="comp-desc">A statistical count model using recent counts, seasonal terms, and weather inputs</div>
               <div class="comp-metrics">
                 <div class="metric-row">
                   <span>Held-Out MAE:</span>
@@ -473,7 +473,7 @@
                   <th style="min-width: 320px;">Triage Explanation (Per-Row Breakdown)</th>
                   <th style="width: 130px;">Time / Recency</th>
                   <th style="width: 95px;">FRP</th>
-                  <th style="width: 115px;">Repeats (8km)</th>
+                  <th style="width: 115px;">Repeats (2km)</th>
                   <th style="width: 105px;">Confidence</th>
                   <th style="width: 140px;">Satellite / Sensor</th>
                   <th style="width: 125px;">Coordinates</th>
@@ -637,6 +637,8 @@
             Available meteorological and satellite evidence does not indicate elevated environmental risk.
           </p>
         </div>
+
+        <div class="risk-weight-note" role="note"><strong>Weighting choice:</strong> EFRI combines weather inputs (65%) and nearby satellite activity (35%). This 65/35 split is a judgment-based design choice, not an empirically fitted weighting.</div>
 
         <!-- Contributing Factors Breakdown -->
         <div class="factors-section">

@@ -98,7 +98,7 @@ const Charts = {
     });
   },
 
-  renderForecastEvaluation(canvasId, plotData) {
+  renderForecastEvaluation(canvasId, plotData, alternativeName = 'Poisson regression') {
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
 
@@ -137,7 +137,7 @@ const Charts = {
             tension: 0.1
           },
           {
-            label: 'Alternative Poisson Model',
+            label: alternativeName,
             data: alt,
             borderColor: '#10B981',
             backgroundColor: 'rgba(16, 185, 129, 0.1)',

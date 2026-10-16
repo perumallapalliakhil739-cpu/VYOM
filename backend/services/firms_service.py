@@ -8,7 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import requests
+import math
+import numpy as np
 import pandas as pd
+from scipy.spatial import cKDTree
 from backend.config import settings
 
 logger = logging.getLogger("neurora.firms")
@@ -177,6 +180,59 @@ class FIRMSService:
         explanation = f"Ranked {tier.lower()} because: {time_str}, {frp_str}, {rep_str}, {conf_str}"
         return score, tier, explanation
 
+    # ------------------------------------------------------------------
+    # Ingestion helpers (single source of truth for validation rules)
+    # ------------------------------------------------------------------
+    REPEAT_RADIUS_KM = 2.0      # neighbours within ~2 km count as repeat detections
+    EARTH_RADIUS_KM = 6371.0088
+
+    @staticmethod
+    def normalize_confidence(conf_raw: Any) -> str:
+        """VIIRS: 'l'/'n'/'h' (or full words). MODIS: 0-100. Exact matches only,
+        so the word 'nominal' is no longer mistaken for 'low'."""
+        if conf_raw is None:
+            return "nominal"
+        if isinstance(conf_raw, str):
+            s = conf_raw.strip().lower()
+            if s in ("h", "high"):
+                return "high"
+            if s in ("l", "low"):
+                return "low"
+            if s in ("n", "nominal"):
+                return "nominal"
+            try:
+                num = float(s)
+            except ValueError:
+                return "nominal"
+        else:
+            try:
+                num = float(conf_raw)
+            except (TypeError, ValueError):
+                return "nominal"
+        if math.isnan(num):
+            return "nominal"
+        if num >= 80:
+            return "high"
+        if num <= 30:
+            return "low"
+        return "nominal"
+
+    @staticmethod
+    def parse_observation_time(acq_date: Any, acq_time: Any) -> Optional[datetime]:
+        """Strictly parse FIRMS acq_date (YYYY-MM-DD) + acq_time (HHMM, UTC).
+        Returns None for anything unparseable (garbage text, NaN, hour>23, minute>59)."""
+        d = str(acq_date).strip()
+        t = str(acq_time).strip()
+        if t.endswith(".0"):
+            t = t[:-2]
+        if not t.isdigit() or len(t) > 4:
+            return None
+        t = t.zfill(4)
+        try:
+            return datetime.strptime(f"{d} {t[:2]}:{t[2:]}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
     def validate_observation_row(
         self,
         row: Dict[str, Any],
@@ -185,113 +241,159 @@ class FIRMSService:
         bbox: Optional[Tuple[float, float, float, float]] = None
     ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
         """
-        Validates an individual satellite detection row for geospatial and physical integrity.
-        Rejects out-of-range coordinates, negative/corrupt FRPs, or missing timestamps.
+        Validates one detection row. Rejects: missing/non-finite/out-of-range coordinates,
+        missing/NaN/non-finite/negative FRP, and any timestamp that does not parse.
+        (The bulk pipeline uses the vectorised twin `_validate_frame`; a parity test keeps them aligned.)
         """
-        # 1. Coordinate physical range validation
         try:
             lat = float(row.get("latitude"))
             lon = float(row.get("longitude"))
-            if pd.isna(lat) or pd.isna(lon):
-                return False, "invalid_or_missing_coordinates", None
-            if not (-90.0 <= lat <= 90.0):
-                return False, "latitude_out_of_range", None
-            if not (-180.0 <= lon <= 180.0):
-                return False, "longitude_out_of_range", None
         except (TypeError, ValueError):
             return False, "invalid_or_missing_coordinates", None
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            return False, "invalid_or_missing_coordinates", None
+        if not (-90.0 <= lat <= 90.0):
+            return False, "latitude_out_of_range", None
+        if not (-180.0 <= lon <= 180.0):
+            return False, "longitude_out_of_range", None
 
-        # 2. FRP non-negative physical validation
-        frp_val = 0.0
-        if "frp" in row and pd.notna(row["frp"]):
-            try:
-                frp_val = float(row["frp"])
-                if frp_val < 0.0:
-                    return False, "negative_or_corrupt_frp", None
-            except (TypeError, ValueError):
-                return False, "negative_or_corrupt_frp", None
+        try:
+            frp_val = float(row.get("frp"))
+        except (TypeError, ValueError):
+            return False, "negative_or_corrupt_frp" if row.get("frp") is not None else "missing_or_nan_frp", None
+        if not math.isfinite(frp_val):
+            return False, "missing_or_nan_frp", None
+        if frp_val < 0.0:
+            return False, "negative_or_corrupt_frp", None
 
-        # 3. Timestamp formatting & validity
-        acq_date = str(row.get("acq_date", "")).strip()
-        acq_time_raw = str(row.get("acq_time", "")).strip().zfill(4)
-        if not acq_date or len(acq_time_raw) < 4:
+        dt = self.parse_observation_time(row.get("acq_date", ""), row.get("acq_time", ""))
+        if dt is None:
             return False, "corrupt_or_missing_timestamp", None
+        acq_date = str(row.get("acq_date")).strip()
+        acq_time_raw = dt.strftime("%H%M")
 
-        # 4. Optional Bounding Box Filter
         if bbox:
             min_lat, min_lon, max_lat, max_lon = bbox
             if not (min_lat <= lat <= max_lat and min_lon <= lon <= max_lon):
                 return False, "outside_bounding_box", None
-
-        # 5. Optional Minimum FRP Filter
         if min_frp is not None and frp_val < min_frp:
             return False, "below_minimum_frp", None
 
-        # 6. Confidence Normalization & Filter
         conf_raw = row.get("confidence", "nominal")
-        conf_norm = "nominal"
-        if isinstance(conf_raw, (int, float)):
-            if conf_raw >= 80:
-                conf_norm = "high"
-            elif conf_raw <= 30:
-                conf_norm = "low"
-            else:
-                conf_norm = "nominal"
-        else:
-            conf_str = str(conf_raw).lower()
-            if "h" in conf_str:
-                conf_norm = "high"
-            elif "l" in conf_str:
-                conf_norm = "low"
-            else:
-                conf_norm = "nominal"
-
-        if min_confidence:
-            if min_confidence == "high" and conf_norm != "high":
-                return False, "below_confidence_threshold", None
-            elif min_confidence == "nominal" and conf_norm == "low":
-                return False, "below_confidence_threshold", None
+        conf_norm = self.normalize_confidence(conf_raw)
+        if min_confidence == "high" and conf_norm != "high":
+            return False, "below_confidence_threshold", None
+        if min_confidence == "nominal" and conf_norm == "low":
+            return False, "below_confidence_threshold", None
 
         return True, None, {
-            "latitude": lat,
-            "longitude": lon,
-            "frp": frp_val,
-            "acq_date": acq_date,
-            "acq_time_raw": acq_time_raw,
-            "confidence_raw": conf_raw,
-            "confidence_norm": conf_norm
+            "latitude": lat, "longitude": lon, "frp": frp_val,
+            "acq_date": acq_date, "acq_time_raw": acq_time_raw,
+            "confidence_raw": conf_raw, "confidence_norm": conf_norm,
         }
+
+    def _validate_frame(self, df: pd.DataFrame, min_confidence=None, min_frp=None, bbox=None):
+        """Vectorised validation of an ENTIRE raw feed (no pre-sampling).
+        Returns (clean_df, Counter_of_rejection_reasons)."""
+        n = len(df)
+
+        def col(name, default=np.nan):
+            return df[name] if name in df.columns else pd.Series(default, index=df.index)
+
+        lat = pd.to_numeric(col("latitude"), errors="coerce")
+        lon = pd.to_numeric(col("longitude"), errors="coerce")
+        frp_raw = col("frp")
+        frp = pd.to_numeric(frp_raw, errors="coerce")
+
+        t = col("acq_time", "").astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
+        t_ok = t.str.fullmatch(r"\d{1,4}")
+        t4 = t.where(t_ok, "").str.zfill(4)
+        dt = pd.to_datetime(
+            col("acq_date", "").astype(str).str.strip() + " " + t4.str[:2] + ":" + t4.str[2:],
+            format="%Y-%m-%d %H:%M", errors="coerce", utc=True,
+        ).where(t_ok)
+
+        conf_raw = col("confidence", "nominal")
+        conf_norm = conf_raw.astype(object).map(self.normalize_confidence)
+
+        reason = pd.Series([None] * n, index=df.index, dtype=object)
+
+        def mark(mask, name):
+            reason.loc[mask.fillna(False) & reason.isna()] = name
+
+        mark(~np.isfinite(lat) | ~np.isfinite(lon), "invalid_or_missing_coordinates")
+        mark((lat < -90) | (lat > 90), "latitude_out_of_range")
+        mark((lon < -180) | (lon > 180), "longitude_out_of_range")
+        mark(frp_raw.notna() & frp.isna(), "negative_or_corrupt_frp")      # present but non-numeric
+        mark(~np.isfinite(frp), "missing_or_nan_frp")
+        mark(frp < 0, "negative_or_corrupt_frp")
+        mark(dt.isna(), "corrupt_or_missing_timestamp")
+        if bbox:
+            min_lat, min_lon, max_lat, max_lon = bbox
+            mark(~((lat >= min_lat) & (lat <= max_lat) & (lon >= min_lon) & (lon <= max_lon)), "outside_bounding_box")
+        if min_frp is not None:
+            mark(frp < min_frp, "below_minimum_frp")
+        if min_confidence == "high":
+            mark(conf_norm != "high", "below_confidence_threshold")
+        elif min_confidence == "nominal":
+            mark(conf_norm == "low", "below_confidence_threshold")
+
+        ok = reason.isna()
+        bright = pd.to_numeric(col("bright_ti4"), errors="coerce").fillna(pd.to_numeric(col("brightness"), errors="coerce"))
+        clean = pd.DataFrame({
+            "latitude": lat[ok], "longitude": lon[ok], "frp": frp[ok], "dt": dt[ok],
+            "acq_date": dt[ok].dt.strftime("%Y-%m-%d"), "acq_time_raw": dt[ok].dt.strftime("%H%M"),
+            "confidence_raw": conf_raw[ok].astype(str), "confidence_norm": conf_norm[ok],
+            "sat_raw": col("satellite", "").astype(str)[ok], "brightness": bright[ok],
+            "daynight": col("daynight", "D").astype(str).str.upper()[ok],
+            "version": col("version", "NRT").astype(str)[ok],
+        })
+        return clean, Counter(reason.dropna().tolist())
+
+    @classmethod
+    def _repeat_counts(cls, lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
+        """Detections (including itself) within REPEAT_RADIUS_KM, by true great-circle distance
+        (no grid-cell edge effects). The open FIRMS feeds span 24 h, so every neighbour is
+        inside the 48 h repeat window."""
+        if len(lat) == 0:
+            return np.zeros(0, dtype=int)
+        la, lo = np.radians(lat), np.radians(lon)
+        xyz = np.column_stack([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo), np.sin(la)])
+        chord = 2.0 * math.sin((cls.REPEAT_RADIUS_KM / cls.EARTH_RADIUS_KM) / 2.0)
+        return np.asarray(cKDTree(xyz).query_ball_point(xyz, r=chord, return_length=True, workers=-1), dtype=int)
+
+    @staticmethod
+    def _score_frame(frp, repeats, age_h, conf_norm) -> np.ndarray:
+        """Vectorised twin of calculate_observation_priority (same weights; used only to pre-select top-N)."""
+        s_frp = np.minimum(100.0, (np.maximum(frp, 0.0) / 50.0) ** 0.65 * 100.0)
+        s_rep = np.minimum(100.0, np.maximum(repeats, 1) * 20.0)
+        s_time = np.maximum(15.0, 100.0 - (np.maximum(age_h, 0.0) / 24.0) * 85.0)
+        s_conf = np.where(conf_norm == "high", 95.0, np.where(conf_norm == "low", 35.0, 65.0))
+        return np.clip(0.35 * s_frp + 0.25 * s_rep + 0.25 * s_time + 0.15 * s_conf, 0.0, 100.0)
 
     def get_all_normalized_hotspots(
         self,
         products: Optional[List[str]] = None,
         min_confidence: Optional[str] = None,
         min_frp: Optional[float] = None,
-        bbox: Optional[Tuple[float, float, float, float]] = None, # (min_lat, min_lon, max_lat, max_lon)
+        bbox: Optional[Tuple[float, float, float, float]] = None,  # (min_lat, min_lon, max_lat, max_lon)
         max_points: int = 5000,
         force_refresh: bool = False
     ) -> Dict[str, Any]:
         """
-        Retrieves real worldwide satellite detections, normalized across all sensors.
-        Deduplicates records, audits loaded vs rejected rows, and provides full observation metadata.
+        Retrieves satellite detections, validates EVERY raw row (no pre-sampling), de-duplicates,
+        counts repeat detections, scores, and returns the top `max_points`.
+        Audit invariant: raw rows == valid unique rows + rejected rows.
         """
         if not products:
             products = list(FIRMS_OPEN_FEEDS.keys())
 
-        all_records = []
-        source_stats: Dict[str, Any] = {}
         now_dt = datetime.now(timezone.utc)
-        rejection_breakdown = Counter()
-
-        total_unique_count = 0
+        rejection_breakdown: Counter = Counter()
+        source_stats: Dict[str, Any] = {}
         sat_breakdown: Dict[str, int] = {}
-        high_conf_count = 0
-        new_24h_count = 0
-        max_detected_frp = 0.0
-        total_frp = 0.0
-        frp_count = 0
-
-        target_per_prod = max(25, int(max_points / max(1, len(products))))
+        frames = []
+        total_raw_rows = 0
 
         for pkey in products:
             feed_info = FIRMS_OPEN_FEEDS.get(pkey)
@@ -302,184 +404,130 @@ class FIRMSService:
                 source_stats[pkey] = {"status": "no_data", "count": 0, "raw_count": 0}
                 continue
 
-            inst = feed_info["instrument"]
-            prod_name = feed_info["product_name"]
+            inst, prod_name = feed_info["instrument"], feed_info["product_name"]
             platform_default = feed_info["platform_default"]
-
             cnt = len(df)
-            total_unique_count += cnt
+            total_raw_rows += cnt
             sat_breakdown[platform_default] = sat_breakdown.get(platform_default, 0) + cnt
-            if "frp" in df.columns:
-                max_val = float(df["frp"].max()) if not df["frp"].empty else 0.0
-                if max_val > max_detected_frp:
-                    max_detected_frp = max_val
-                total_frp += float(df["frp"].sum())
-                frp_count += cnt
 
-            # Subsample slice for detailed record parsing to keep response instantaneous
-            if len(df) > target_per_prod:
-                if "frp" in df.columns:
-                    sample_df = df.sort_values(by="frp", ascending=False).head(target_per_prod)
-                else:
-                    sample_df = df.head(target_per_prod)
-            else:
-                sample_df = df
-
-            dict_rows = sample_df.to_dict('records')
-
-            # Validate each row through the quality validation filter
-            for row in dict_rows:
-                valid, reject_reason, cleaned = self.validate_observation_row(
-                    row,
-                    min_confidence=min_confidence,
-                    min_frp=min_frp,
-                    bbox=bbox
-                )
-                if not valid:
-                    rejection_breakdown[reject_reason] += 1
-                    continue
-
-                lat = cleaned["latitude"]
-                lon = cleaned["longitude"]
-                frp = cleaned["frp"]
-                acq_date = cleaned["acq_date"]
-                acq_time_raw = cleaned["acq_time_raw"]
-                conf_raw = cleaned["confidence_raw"]
-                conf_norm = cleaned["confidence_norm"]
-
-                sat_raw = str(row.get("satellite", ""))
-                platform = self.get_source_platform_name(inst, sat_raw, platform_default)
-
-                hour = acq_time_raw[:2]
-                minute = acq_time_raw[2:4]
-                time_formatted = f"{hour}:{minute}"
-
-                iso_utc = f"{acq_date}T{hour}:{minute}:00Z"
-                obs_age_hours = 0.0
-                try:
-                    dt = datetime.strptime(f"{acq_date} {hour}:{minute}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
-                    obs_age_hours = round((now_dt - dt).total_seconds() / 3600.0, 1)
-                except Exception:
-                    pass
-
-                # Brightness temperature (Kelvin)
-                brightness = None
-                if "bright_ti4" in row and pd.notna(row["bright_ti4"]):
-                    brightness = float(row["bright_ti4"])
-                elif "brightness" in row and pd.notna(row["brightness"]):
-                    brightness = float(row["brightness"])
-
-                dn = str(row.get("daynight", "D")).upper()
-                daynight_str = "Day" if dn == "D" else "Night"
-
-                id_str = f"{lat:.4f}_{lon:.4f}_{acq_date}_{acq_time_raw}_{platform}"
-                rec_id = hashlib.md5(id_str.encode()).hexdigest()[:12]
-
-                all_records.append({
-                    "id": rec_id,
-                    "latitude": round(lat, 5),
-                    "longitude": round(lon, 5),
-                    "satellite": platform,
-                    "instrument": inst,
-                    "product": prod_name,
-                    "acq_date": acq_date,
-                    "acq_time": time_formatted,
-                    "datetime_utc": iso_utc,
-                    "observation_age_hours": max(0.0, obs_age_hours),
-                    "confidence_raw": str(conf_raw),
-                    "confidence_norm": conf_norm,
-                    "brightness_k": brightness,
-                    "frp_mw": frp,
-                    "daynight": daynight_str,
-                    "version": str(row.get("version", "NRT"))
-                })
-
+            clean, rejects = self._validate_frame(df, min_confidence, min_frp, bbox)
+            rejection_breakdown.update(rejects)
+            if len(clean):
+                names = {s: self.get_source_platform_name(inst, s, platform_default) for s in clean["sat_raw"].unique()}
+                clean["platform"] = clean["sat_raw"].map(names)
+                clean["instrument"] = inst
+                clean["product"] = prod_name
+                frames.append(clean)
             source_stats[pkey] = {
-                "status": "connected",
-                "instrument": inst,
-                "platform": platform_default,
-                "raw_count": cnt,
-                "product_name": prod_name
+                "status": "connected", "instrument": inst, "platform": platform_default,
+                "raw_count": cnt, "valid_count": len(clean), "product_name": prod_name,
             }
 
-        # Deduplication based on composite spatial-temporal record ID
-        unique_map = {}
-        for r in all_records:
-            unique_map[r["id"]] = r
-        unique_records = list(unique_map.values())
+        if frames:
+            allv = pd.concat(frames, ignore_index=True)
+            before = len(allv)
+            allv = (allv.assign(_la=allv["latitude"].round(4), _lo=allv["longitude"].round(4))
+                        .drop_duplicates(subset=["_la", "_lo", "acq_date", "acq_time_raw", "platform"])
+                        .drop(columns=["_la", "_lo"]).reset_index(drop=True))
+            duplicate_count = before - len(allv)
+            if duplicate_count:
+                rejection_breakdown["duplicate_spatial_temporal_record"] = duplicate_count
+        else:
+            allv = pd.DataFrame(columns=["latitude", "longitude", "frp", "dt", "confidence_norm"])
+            duplicate_count = 0
 
-        # Track swath overlap duplicates
-        duplicate_count = len(all_records) - len(unique_records)
-        if duplicate_count > 0:
-            rejection_breakdown["duplicate_spatial_temporal_record"] = duplicate_count
+        n_valid = len(allv)
+        if n_valid:
+            allv["age_h"] = ((now_dt - allv["dt"]).dt.total_seconds() / 3600.0).round(1).clip(lower=0.0)
+            allv["repeats"] = self._repeat_counts(allv["latitude"].to_numpy(float), allv["longitude"].to_numpy(float))
+            allv["pre"] = self._score_frame(allv["frp"].to_numpy(float), allv["repeats"].to_numpy(),
+                                            allv["age_h"].to_numpy(float), allv["confidence_norm"].to_numpy(object))
+            top = allv.sort_values(["pre", "frp"], ascending=False).head(max_points)
+        else:
+            top = allv
 
-        # 1. Spatial clustering for repeat detections (~0.02 deg ~ 2.2 km cluster radius)
-        grid_counts = Counter((round(r["latitude"], 2), round(r["longitude"], 2)) for r in unique_records)
-
-        # 2. Score and rank individual observations by time, confidence, FRP, and repeat detections
-        for r in unique_records:
-            lat_r = round(r["latitude"], 2)
-            lon_r = round(r["longitude"], 2)
-            repeats = grid_counts.get((lat_r, lon_r), 1)
-
+        records = []
+        for r in top.itertuples(index=False):
             score, tier, explanation = self.calculate_observation_priority(
-                frp=r.get("frp_mw", 0.0),
-                repeats=repeats,
-                age_hours=r.get("observation_age_hours", 0.0),
-                confidence_norm=r.get("confidence_norm", "nominal"),
-                confidence_raw=r.get("confidence_raw", "")
-            )
+                frp=r.frp, repeats=int(r.repeats), age_hours=float(r.age_h),
+                confidence_norm=r.confidence_norm, confidence_raw=r.confidence_raw)
+            review_tier = "HIGH" if score >= 70 else "MEDIUM" if score >= 45 else "LOW"
+            priority_label = {"HIGH": "High review priority", "MEDIUM": "Medium review priority", "LOW": "Low review priority"}[review_tier]
+            triage_explanation = f"Ranked {review_tier.lower()} because: {explanation.split('because: ', 1)[1]}"
+            repeats_clean = int(r.repeats)
+            age_clean = float(r.age_h)
+            frp_clean = float(r.frp)
+            confidence_clean = str(r.confidence_norm)
+            id_str = f"{r.latitude:.4f}_{r.longitude:.4f}_{r.acq_date}_{r.acq_time_raw}_{r.platform}"
+            records.append({
+                "id": hashlib.md5(id_str.encode()).hexdigest()[:12],
+                "latitude": round(float(r.latitude), 5), "longitude": round(float(r.longitude), 5),
+                "satellite": r.platform, "instrument": r.instrument, "product": r.product,
+                "acq_date": r.acq_date, "acq_time": f"{r.acq_time_raw[:2]}:{r.acq_time_raw[2:]}",
+                "datetime_utc": f"{r.acq_date}T{r.acq_time_raw[:2]}:{r.acq_time_raw[2:]}:00Z",
+                "observation_age_hours": float(r.age_h),
+                "confidence_raw": r.confidence_raw, "confidence_norm": r.confidence_norm,
+                "brightness_k": None if pd.isna(r.brightness) else float(r.brightness),
+                "frp_mw": round(float(r.frp), 2),
+                "daynight": "Day" if r.daynight == "D" else "Night",
+                "version": r.version,
+                "ranking_score": score, "priority_tier": tier,
+                "repeat_detections": repeats_clean, "ranking_explanation": explanation,
+                "triage_score": score, "triage_tier": review_tier, "triage_priority": priority_label,
+                "triage_badge": review_tier.title(), "triage_class": {"HIGH": "danger", "MEDIUM": "warning", "LOW": "success"}[review_tier],
+                "triage_color": {"HIGH": "#EF4444", "MEDIUM": "#F97316", "LOW": "#10B981"}[review_tier],
+                "repeat_count": max(0, repeats_clean - 1), "triage_explanation": triage_explanation,
+                "triage_rank": 0,
+                "triage_factors": {
+                    "time": {"subscore": max(15.0, 100.0 - (age_clean / 24.0) * 85.0), "age_hours": age_clean},
+                    "frp": {"subscore": min(100.0, (max(0.0, frp_clean) / 50.0) ** 0.65 * 100.0), "frp_mw": frp_clean},
+                    "repeats": {"subscore": min(100.0, repeats_clean * 20.0), "count": max(0, repeats_clean - 1)},
+                    "confidence": {"subscore": 95.0 if confidence_clean == "high" else 35.0 if confidence_clean == "low" else 65.0, "norm": confidence_clean},
+                },
+            })
+        records.sort(key=lambda x: (x["ranking_score"], x["frp_mw"]), reverse=True)
+        for i, rec in enumerate(records, 1):
+            rec["rank"] = i
+            rec["triage_rank"] = i
 
-            r["ranking_score"] = score
-            r["priority_tier"] = tier
-            r["repeat_detections"] = repeats
-            r["ranking_explanation"] = explanation
-
-        # Strict sorting: highest priority observation (#1) first
-        unique_records.sort(key=lambda x: (x.get("ranking_score", 0.0), x.get("frp_mw", 0.0)), reverse=True)
-        for i, r in enumerate(unique_records, 1):
-            r["rank"] = i
-
-        display_records = unique_records[:max_points]
-        sampled = total_unique_count > len(display_records)
-        avg_frp = round(total_frp / max(1, frp_count), 2)
-
-        # Build Ingestion Audit: Rows Loaded vs. Rejected and Why
-        total_raw_rows = sum(s.get("raw_count", 0) for s in source_stats.values())
-        total_rejected = sum(rejection_breakdown.values())
-        retention_pct = round((len(display_records) / max(1, total_raw_rows)) * 100, 2) if total_raw_rows > 0 else 100.0
-
+        total_rejected = total_raw_rows - n_valid     # == sum(rejection_breakdown.values())
+        valid_frp = allv["frp"] if n_valid else pd.Series(dtype=float)
+        detail = ", ".join(f"{v:,} {k.replace('_', ' ')}" for k, v in rejection_breakdown.most_common()) or "none"
         ingestion_audit = {
             "total_raw_rows_fetched": total_raw_rows,
-            "valid_rows_loaded": len(display_records),
+            "valid_rows_loaded": n_valid,
+            "rows_returned_to_client": len(records),
             "total_rows_rejected": total_rejected,
             "rejection_breakdown": dict(rejection_breakdown),
             "duplicate_swaths_deduplicated": duplicate_count,
-            "retention_rate_pct": retention_pct,
+            "retention_rate_pct": round(100.0 * n_valid / total_raw_rows, 2) if total_raw_rows else 100.0,
             "data_integrity_status": "PASSED_ANOMALIES_CLEANED" if total_rejected > 0 else "PASSED_CLEAN",
-            "summary_statement": f"{len(display_records):,} valid rows loaded from {total_raw_rows:,} raw observations ({total_rejected:,} rejected / filtered: {duplicate_count:,} duplicate swaths, {rejection_breakdown.get('invalid_or_missing_coordinates', 0):,} coordinate errors, {rejection_breakdown.get('negative_or_corrupt_frp', 0):,} non-physical FRPs)"
+            "summary_statement": f"{n_valid:,} valid rows loaded from {total_raw_rows:,} raw observations ({total_rejected:,} rejected: {detail})",
         }
-
         return {
             "metadata": {
-                "total_unique_detections": len(unique_records),
-                "returned_detections": len(display_records),
-                "is_sampled": sampled,
-                "data_freshness_utc": now_dt.isoformat(),
-                "sources_evaluated": source_stats,
+                "total_unique_detections": n_valid, "returned_detections": len(records),
+                "is_sampled": n_valid > len(records),
+                "data_freshness_utc": now_dt.isoformat(), "sources_evaluated": source_stats,
                 "ingestion_audit": ingestion_audit,
-                "attribution": "NASA FIRMS (EOSDIS LANCE / LDOPE / SSEC). Real satellite observations."
+                "attribution": "NASA FIRMS (EOSDIS LANCE / LDOPE / SSEC). Real satellite observations.",
             },
             "summary": {
-                "total_count": len(unique_records),
-                "new_24h_count": new_24h_count,
-                "high_confidence_count": high_conf_count,
+                "total_count": n_valid,
+                "new_24h_count": int((allv["age_h"] <= 24.0).sum()) if n_valid else 0,
+                "high_confidence_count": int((allv["confidence_norm"] == "high").sum()) if n_valid else 0,
                 "satellite_breakdown": sat_breakdown,
-                "avg_frp_mw": avg_frp,
-                "max_frp_mw": round(max_detected_frp, 2)
+                "avg_frp_mw": round(float(valid_frp.mean()), 2) if n_valid else 0.0,
+                "max_frp_mw": round(float(valid_frp.max()), 2) if n_valid else 0.0,
+                "triage_summary": {
+                    "high_review_priority_count": sum(r["triage_tier"] == "HIGH" for r in records),
+                    "medium_review_priority_count": sum(r["triage_tier"] == "MEDIUM" for r in records),
+                    "low_review_priority_count": sum(r["triage_tier"] == "LOW" for r in records),
+                    "repeat_cluster_count": sum(r["repeat_count"] > 0 for r in records),
+                },
             },
             "data_quality_audit": ingestion_audit,
-            "hotspots": display_records
+            "hotspots": records,
         }
 
 firms_service = FIRMSService()

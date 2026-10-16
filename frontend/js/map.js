@@ -294,7 +294,7 @@ const MapController = {
     const priorityLabel = pt.triage_priority || 'Low review priority';
     const priorityColor = pt.triage_color || '#10B981';
     const explanationText = pt.triage_explanation || 'Satellite thermal anomaly observation.';
-    const repeatsText = pt.repeat_count !== undefined ? `${pt.repeat_count} in 8km radius` : '0 (isolated)';
+    const repeatsText = pt.repeat_count !== undefined ? `${pt.repeat_count} in 2km radius` : '0 (isolated)';
 
     return `
       <div class="hotspot-popup-card">

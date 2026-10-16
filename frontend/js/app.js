@@ -595,10 +595,12 @@ const App = {
     const fCount = document.getElementById('metricForecastCount');
     const fTrend = document.getElementById('metricForecastTrend');
     const fBaseline = document.getElementById('metricBaselineCount');
+    const fModel = document.getElementById('metricForecastModel');
 
     if (fCount) fCount.innerText = (nextDay.alternative_prediction || 0).toLocaleString();
     if (fTrend) fTrend.innerText = `${nextDay.trend_vs_yesterday} vs Yesterday`;
     if (fBaseline) fBaseline.innerText = (nextDay.baseline_prediction || 0).toLocaleString();
+    if (fModel) fModel.innerText = nextDay.model_name || 'Poisson regression';
 
     // Update Lower Forecasting Tab
     const evalPill = document.getElementById('evalPeriodPill');
@@ -609,6 +611,7 @@ const App = {
     const bMae = document.getElementById('evalBaselineMae');
     const bRmse = document.getElementById('evalBaselineRmse');
     const aMae = document.getElementById('evalAltMae');
+    const aModelName = document.getElementById('evalAltModelName');
     const aRmse = document.getElementById('evalAltRmse');
     const narrative = document.getElementById('evalNarrative');
     const improveStat = document.getElementById('evalImprovementStat');
@@ -616,21 +619,36 @@ const App = {
     if (bMae) bMae.innerText = comp.baseline_model?.held_out_mae?.toLocaleString() || '--';
     if (bRmse) bRmse.innerText = comp.baseline_model?.held_out_rmse?.toLocaleString() || '--';
     if (aMae) aMae.innerText = comp.alternative_model?.held_out_mae?.toLocaleString() || '--';
+    if (aModelName) aModelName.innerText = comp.alternative_model?.name || 'Poisson regression';
     if (aRmse) aRmse.innerText = comp.alternative_model?.held_out_rmse?.toLocaleString() || '--';
     if (narrative) narrative.innerText = comp.narrative || '';
     if (improveStat) {
-      if (comp.alternative_outperformed_baseline) {
-        improveStat.innerText = `Poisson MAE Improvement: -${comp.mae_improvement_pct}%`;
-        improveStat.style.color = '#10B981';
+      const baselineMae = comp.baseline_model?.held_out_mae;
+      const alternativeMae = comp.alternative_model?.held_out_mae;
+      if (typeof baselineMae === 'number' && typeof alternativeMae === 'number') {
+        if (alternativeMae < baselineMae && baselineMae > 0) {
+          const pct = ((baselineMae - alternativeMae) / baselineMae * 100).toFixed(1);
+          improveStat.innerText = `Alternative model MAE ${pct}% lower than lag-1`;
+          improveStat.style.color = '#10B981';
+        } else if (alternativeMae > baselineMae && baselineMae > 0) {
+          const pct = ((alternativeMae - baselineMae) / baselineMae * 100).toFixed(1);
+          improveStat.innerText = `Alternative model MAE ${pct}% higher than lag-1`;
+          improveStat.style.color = '#FCA5A5';
+        } else if (alternativeMae === baselineMae) {
+          improveStat.innerText = 'Held-out MAE tied';
+          improveStat.style.color = '#94A3B8';
+        } else {
+          improveStat.innerText = `Held-out MAE: regression ${alternativeMae.toLocaleString()}, lag-1 ${baselineMae.toLocaleString()}`;
+          improveStat.style.color = '#FCA5A5';
+        }
       } else {
-        improveStat.innerText = `Baseline Stability Advantage: +${Math.abs(comp.mae_improvement_pct)}%`;
-        improveStat.style.color = '#94A3B8';
+        improveStat.innerText = 'Held-out MAE comparison unavailable';
       }
     }
 
     // Render Evaluation Chart
     if (forecast.recent_series_plot) {
-      Charts.renderForecastEvaluation('forecastEvalChart', forecast.recent_series_plot);
+      Charts.renderForecastEvaluation('forecastEvalChart', forecast.recent_series_plot, comp.alternative_model?.name || 'Poisson regression');
     }
 
     // Render Historical Daily Time Series Tab
@@ -745,7 +763,7 @@ const App = {
               <div class="triage-driver-chips">
                 <span class="driver-chip chip-time" title="Observation Recency">⚡ ${ageStr}</span>
                 <span class="driver-chip chip-frp" title="Fire Radiative Power">🔥 ${r.frp_mw || 0} MW</span>
-                <span class="driver-chip chip-repeat ${repeats > 0 ? 'active' : ''}" title="Repeat Detections in 8km vicinity">🔁 ${repeats} repeat${repeats === 1 ? '' : 's'}</span>
+                <span class="driver-chip chip-repeat ${repeats > 0 ? 'active' : ''}" title="Repeat Detections in 2km vicinity">🔁 ${repeats} repeat${repeats === 1 ? '' : 's'}</span>
                 <span class="driver-chip chip-conf" title="Sensor Confidence">✓ ${r.confidence_norm} conf</span>
               </div>
             </div>
@@ -760,7 +778,7 @@ const App = {
           </td>
           <td>
             <span class="repeat-count-tag ${repeats >= 3 ? 'high-rep' : repeats >= 1 ? 'cluster-rep' : 'isolated-rep'}">
-              ${repeats > 0 ? `${repeats} in 8km` : '0 (isolated)'}
+              ${repeats > 0 ? `${repeats} in 2km` : '0 (isolated)'}
             </span>
           </td>
           <td>

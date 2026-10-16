@@ -2397,3 +2397,17 @@ h1, h2, h3, h4, .brand-name {
 }
 
 
+.risk-weight-note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent-blue);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: rgba(56, 189, 248, 0.08);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.risk-weight-note strong {
+  color: var(--text-main);
+}

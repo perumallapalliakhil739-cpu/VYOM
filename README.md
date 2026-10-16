@@ -10,7 +10,7 @@
 
 ## 1. Project Overview
 
-**Neurora** is an advanced worldwide environmental intelligence and triage dashboard designed to monitor active spaceborne thermal hotspots, prioritize individual satellite observations for analyst review, and forecast daily satellite fire detections across the entire globe.
+**Neurora** is a worldwide dashboard for reviewing satellite thermal observations, prioritizing detections for analyst review, and forecasting daily satellite detection counts.
 
 ### Key Capabilities
 - **Worldwide Coverage:** Full global map covering all continents, countries, oceans, islands, and custom bounding boxes.
@@ -23,7 +23,7 @@
 - **Live Surface Meteorology (Open-Meteo):** Real-time temperature, relative humidity, wind speed & direction compass, precipitation deficit, and 24-hour forecast trends.
 - **Atmospheric Oxygen Integrity:** Explicit reporting indicating that atmospheric oxygen concentration is not measured by standard meteorological stations and is not a direct predictor of wildfire ignition, as ambient tropospheric O₂ (~20.95%) is globally ubiquitous.
 - **Explainable Environmental Fire-Risk (EFRI):** Multi-factor risk engine categorizing locations into **High review priority**, **Medium review priority**, and **Low review priority** with factor contribution breakdowns, analyst review procedures, and transparent limitations.
-- **Chronological Time-Series Forecasting:** Predicts next-day satellite-observed fire-detection counts for any region or worldwide, comparing a **Baseline Lag-1 Persistence Benchmark** with a **Regularized Poisson Count Regression Model** on a strictly time-ordered held-out test split.
+- **Chronological Time-Series Forecasting:** Predicts next-day satellite-observed fire-detection counts for any region or worldwide, comparing a **Baseline Lag-1 Persistence Benchmark** with a **Poisson regression model** on a strictly time-ordered held-out test split.
 - **Historical Data & Reproducible Notebook:** Complete multi-region historical time series exported to CSV and Parquet, accompanied by a Jupyter notebook for verification.
 
 ---
@@ -119,7 +119,7 @@ Neurora features a dual-layer risk and triage architecture: **Location-Level EFR
 
 ### A. Location-Level: Explainable Environmental Fire-Risk (EFRI)
 
-The EFRI module computes an explainable 0–100 index for any given geographic coordinate or polygon, blending numerical meteorological potential (65%) with spatial hotspot clustering (35%):
+The EFRI module computes an explainable 0–100 index for any given geographic coordinate or polygon, blending numerical meteorological potential (65%) with spatial hotspot clustering (35%). This 65/35 split is a judgment-based design choice, not an empirically fitted weighting:
 
 $$\text{EFRI} = 0.65 \times (\text{WeatherBase} + \text{SynergyBoost}) + 0.35 \times \text{ThermalActivity}$$
 
@@ -148,7 +148,7 @@ Each individual detection is scored across four independent remote sensing dimen
    - Extreme intense fires ($> 100\text{ MW}$) receive score $100$.
    - Moderate ($25 - 50\text{ MW}$) score 60–80; low ($< 10\text{ MW}$) score 20–40.
 3. **Repeat Detections / Vicinity Cluster Density (25% Weight):**
-   - Counts the number of overlapping or nearby satellite detections within an **8 km radius** across multiple orbital sweeps (NOAA-20, NOAA-21, Suomi-NPP, MODIS).
+   - Counts the number of overlapping or nearby satellite detections within a **2 km radius** across multiple orbital sweeps (NOAA-20, NOAA-21, Suomi-NPP, MODIS).
    - $\ge 4\text{ repeat detections}$ receives score $100$ (indicates confirmed, persistent fire front).
    - $2 - 3\text{ repeats}$ receives score 60–80; isolated detections ($0\text{ repeats}$) score 15.
 4. **Normalized Confidence (20% Weight):**
@@ -179,7 +179,7 @@ In wildfire remote sensing, it is critical to distinguish between **location-lev
 | Dimension | Scope | Primary Drivers | Purpose |
 | :--- | :--- | :--- | :--- |
 | **EFRI (Environmental Fire Risk)** | Location / Area | 65% Surface Weather & Fuel Deficit, 35% Spatial Thermal Context | Evaluates whether atmospheric conditions support fire spread at a coordinate. |
-| **OPR (Observation Priority Ranking)** | Individual Satellite Detection | 35% FRP, 25% Repeat Cluster Detections, 25% Observation Time Recency, 15% Confidence | Ranks every individual spaceborne observation to prioritize urgent response. |
+| **OPR (Observation Priority Ranking)** | Individual Satellite Detection | 35% FRP, 25% Repeat Cluster Detections, 25% Observation Time Recency, 15% Confidence | Ranks each individual satellite observation to support analyst review. |
 
 ### The 4-Factor OPR Ranking Formula
 
@@ -222,9 +222,9 @@ All reverse geocoded coordinates, search queries, and selected location cards ar
 
 The forecasting pipeline predicts **next-day satellite fire-detection counts**:
 - **Baseline Model:** Lag-1 persistence benchmark ($y_t = y_{t-1}$).
-- **Alternative Model:** Regularized Poisson Count Regression ($\log(\lambda_t) = \beta_0 + \sum \beta_i X_{it}$) with L2 penalty, utilizing multi-day lags ($t-1, t-2, \text{MA}_7$), cyclical day-of-year trigonometric terms, and surface meteorological variables.
+- **Alternative Model:** Poisson regression, a statistical count model, using an L2 penalty, recent count lags, seasonal terms, and surface weather variables.
 - **Evaluation Protocol:** **Strictly chronological held-out test period** (latest 20% of timeline, never randomly shuffled).
-- **Reported Metrics:** Mean Absolute Error (MAE), Root Mean Squared Error (RMSE), and 80% prediction intervals.
+- **Reported Metrics:** Held-out Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE) for both lag-1 persistence and Poisson regression, plus a direct statement of whether regression beats the baseline on MAE. No prediction interval is reported.
 - **Definition:** Predicts satellite-observed active fire detections under defined counting rules, not confirmed ground fire perimeters.
 
 ---
