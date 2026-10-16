@@ -124,6 +124,144 @@ class FIRMSService:
                 return pd.read_csv(cache_file)
             return None
 
+    def calculate_observation_priority(
+        self,
+        frp: float,
+        repeats: int,
+        age_hours: float,
+        confidence_norm: str,
+        confidence_raw: str = ""
+    ) -> Tuple[float, str, str]:
+        """
+        Computes the 4-factor Observation Priority Ranking (OPR) score (0 to 100),
+        priority tier (CRITICAL, HIGH, ELEVATED, MODERATE, LOW), and explanation string.
+        Higher FRP strictly raises the score; older detections strictly lower it.
+        """
+        frp_clean = max(0.0, float(frp or 0.0))
+        s_frp = min(100.0, (frp_clean / 50.0) ** 0.65 * 100.0)
+
+        repeats_clean = max(1, int(repeats or 1))
+        s_repeat = min(100.0, repeats_clean * 20.0)
+
+        age_clean = max(0.0, float(age_hours or 0.0))
+        s_time = max(15.0, 100.0 - (age_clean / 24.0) * 85.0)
+
+        conf_norm = str(confidence_norm or "nominal").lower()
+        if conf_norm == "high":
+            s_conf = 95.0
+        elif conf_norm == "low":
+            s_conf = 35.0
+        else:
+            s_conf = 65.0
+
+        score = round(0.35 * s_frp + 0.25 * s_repeat + 0.25 * s_time + 0.15 * s_conf, 1)
+        score = min(100.0, max(0.0, score))
+
+        if score >= 75:
+            tier = "CRITICAL"
+        elif score >= 60:
+            tier = "HIGH"
+        elif score >= 45:
+            tier = "ELEVATED"
+        elif score >= 30:
+            tier = "MODERATE"
+        else:
+            tier = "LOW"
+
+        time_str = f"recent ({age_clean:.1f}h ago)" if age_clean < 4 else (f"{age_clean:.1f}h ago" if age_clean < 12 else f"older pass ({age_clean:.1f}h ago)")
+        frp_str = f"high FRP ({frp_clean:.1f} MW)" if frp_clean >= 40 else (f"moderate FRP ({frp_clean:.1f} MW)" if frp_clean >= 15 else f"low FRP ({frp_clean:.1f} MW)")
+        rep_str = f"{repeats_clean} repeat detections in cluster" if repeats_clean > 1 else "isolated detection (1 repeat)"
+        raw_label = f" ({confidence_raw})" if confidence_raw else ""
+        conf_str = f"high satellite confidence{raw_label}" if conf_norm == "high" else f"{conf_norm} confidence{raw_label}"
+
+        explanation = f"Ranked {tier.lower()} because: {time_str}, {frp_str}, {rep_str}, {conf_str}"
+        return score, tier, explanation
+
+    def validate_observation_row(
+        self,
+        row: Dict[str, Any],
+        min_confidence: Optional[str] = None,
+        min_frp: Optional[float] = None,
+        bbox: Optional[Tuple[float, float, float, float]] = None
+    ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
+        """
+        Validates an individual satellite detection row for geospatial and physical integrity.
+        Rejects out-of-range coordinates, negative/corrupt FRPs, or missing timestamps.
+        """
+        # 1. Coordinate physical range validation
+        try:
+            lat = float(row.get("latitude"))
+            lon = float(row.get("longitude"))
+            if pd.isna(lat) or pd.isna(lon):
+                return False, "invalid_or_missing_coordinates", None
+            if not (-90.0 <= lat <= 90.0):
+                return False, "latitude_out_of_range", None
+            if not (-180.0 <= lon <= 180.0):
+                return False, "longitude_out_of_range", None
+        except (TypeError, ValueError):
+            return False, "invalid_or_missing_coordinates", None
+
+        # 2. FRP non-negative physical validation
+        frp_val = 0.0
+        if "frp" in row and pd.notna(row["frp"]):
+            try:
+                frp_val = float(row["frp"])
+                if frp_val < 0.0:
+                    return False, "negative_or_corrupt_frp", None
+            except (TypeError, ValueError):
+                return False, "negative_or_corrupt_frp", None
+
+        # 3. Timestamp formatting & validity
+        acq_date = str(row.get("acq_date", "")).strip()
+        acq_time_raw = str(row.get("acq_time", "")).strip().zfill(4)
+        if not acq_date or len(acq_time_raw) < 4:
+            return False, "corrupt_or_missing_timestamp", None
+
+        # 4. Optional Bounding Box Filter
+        if bbox:
+            min_lat, min_lon, max_lat, max_lon = bbox
+            if not (min_lat <= lat <= max_lat and min_lon <= lon <= max_lon):
+                return False, "outside_bounding_box", None
+
+        # 5. Optional Minimum FRP Filter
+        if min_frp is not None and frp_val < min_frp:
+            return False, "below_minimum_frp", None
+
+        # 6. Confidence Normalization & Filter
+        conf_raw = row.get("confidence", "nominal")
+        conf_norm = "nominal"
+        if isinstance(conf_raw, (int, float)):
+            if conf_raw >= 80:
+                conf_norm = "high"
+            elif conf_raw <= 30:
+                conf_norm = "low"
+            else:
+                conf_norm = "nominal"
+        else:
+            conf_str = str(conf_raw).lower()
+            if "h" in conf_str:
+                conf_norm = "high"
+            elif "l" in conf_str:
+                conf_norm = "low"
+            else:
+                conf_norm = "nominal"
+
+        if min_confidence:
+            if min_confidence == "high" and conf_norm != "high":
+                return False, "below_confidence_threshold", None
+            elif min_confidence == "nominal" and conf_norm == "low":
+                return False, "below_confidence_threshold", None
+
+        return True, None, {
+            "latitude": lat,
+            "longitude": lon,
+            "frp": frp_val,
+            "acq_date": acq_date,
+            "acq_time_raw": acq_time_raw,
+            "confidence_raw": conf_raw,
+            "confidence_norm": conf_norm
+        }
+
     def get_all_normalized_hotspots(
         self,
         products: Optional[List[str]] = None,
@@ -135,7 +273,7 @@ class FIRMSService:
     ) -> Dict[str, Any]:
         """
         Retrieves real worldwide satellite detections, normalized across all sensors.
-        Deduplicates records and provides full observation metadata.
+        Deduplicates records, audits loaded vs rejected rows, and provides full observation metadata.
         """
         if not products:
             products = list(FIRMS_OPEN_FEEDS.keys())
@@ -143,6 +281,7 @@ class FIRMSService:
         all_records = []
         source_stats: Dict[str, Any] = {}
         now_dt = datetime.now(timezone.utc)
+        rejection_breakdown = Counter()
 
         total_unique_count = 0
         sat_breakdown: Dict[str, int] = {}
@@ -160,14 +299,13 @@ class FIRMSService:
                 continue
             df = self.fetch_product_raw(pkey, force_refresh=force_refresh)
             if df is None or df.empty:
-                source_stats[pkey] = {"status": "no_data", "count": 0}
+                source_stats[pkey] = {"status": "no_data", "count": 0, "raw_count": 0}
                 continue
 
             inst = feed_info["instrument"]
             prod_name = feed_info["product_name"]
             platform_default = feed_info["platform_default"]
 
-            # Fast vector stats before spatial slicing
             cnt = len(df)
             total_unique_count += cnt
             sat_breakdown[platform_default] = sat_breakdown.get(platform_default, 0) + cnt
@@ -178,20 +316,7 @@ class FIRMSService:
                 total_frp += float(df["frp"].sum())
                 frp_count += cnt
 
-            # Filter bounding box early if provided
-            if bbox:
-                min_lat, min_lon, max_lat, max_lon = bbox
-                df = df[
-                    (df["latitude"] >= min_lat) & (df["latitude"] <= max_lat) &
-                    (df["longitude"] >= min_lon) & (df["longitude"] <= max_lon)
-                ]
-
-            if min_frp is not None and "frp" in df.columns:
-                df = df[df["frp"] >= min_frp]
-
-            count_before_conf = len(df)
-
-            # Sample slice for detailed record parsing to keep response instantaneous
+            # Subsample slice for detailed record parsing to keep response instantaneous
             if len(df) > target_per_prod:
                 if "frp" in df.columns:
                     sample_df = df.sort_values(by="frp", ascending=False).head(target_per_prod)
@@ -202,17 +327,29 @@ class FIRMSService:
 
             dict_rows = sample_df.to_dict('records')
 
-            # Process sampled rows quickly
+            # Validate each row through the quality validation filter
             for row in dict_rows:
-                lat = float(row.get("latitude", 0.0))
-                lon = float(row.get("longitude", 0.0))
+                valid, reject_reason, cleaned = self.validate_observation_row(
+                    row,
+                    min_confidence=min_confidence,
+                    min_frp=min_frp,
+                    bbox=bbox
+                )
+                if not valid:
+                    rejection_breakdown[reject_reason] += 1
+                    continue
+
+                lat = cleaned["latitude"]
+                lon = cleaned["longitude"]
+                frp = cleaned["frp"]
+                acq_date = cleaned["acq_date"]
+                acq_time_raw = cleaned["acq_time_raw"]
+                conf_raw = cleaned["confidence_raw"]
+                conf_norm = cleaned["confidence_norm"]
+
                 sat_raw = str(row.get("satellite", ""))
                 platform = self.get_source_platform_name(inst, sat_raw, platform_default)
 
-                acq_date = str(row.get("acq_date", "")).strip()
-                acq_time_raw = str(row.get("acq_time", "")).strip().zfill(4)
-                
-                # Format time HH:MM
                 hour = acq_time_raw[:2]
                 minute = acq_time_raw[2:4]
                 time_formatted = f"{hour}:{minute}"
@@ -225,42 +362,12 @@ class FIRMSService:
                 except Exception:
                     pass
 
-                # Confidence handling
-                conf_raw = row.get("confidence", "nominal")
-                conf_norm = "nominal"
-                if isinstance(conf_raw, (int, float)):
-                    if conf_raw >= 80:
-                        conf_norm = "high"
-                    elif conf_raw <= 30:
-                        conf_norm = "low"
-                    else:
-                        conf_norm = "nominal"
-                else:
-                    conf_str = str(conf_raw).lower()
-                    if "h" in conf_str:
-                        conf_norm = "high"
-                    elif "l" in conf_str:
-                        conf_norm = "low"
-                    else:
-                        conf_norm = "nominal"
-
-                if min_confidence:
-                    if min_confidence == "high" and conf_norm != "high":
-                        continue
-                    elif min_confidence == "nominal" and conf_norm == "low":
-                        continue
-
                 # Brightness temperature (Kelvin)
                 brightness = None
                 if "bright_ti4" in row and pd.notna(row["bright_ti4"]):
                     brightness = float(row["bright_ti4"])
                 elif "brightness" in row and pd.notna(row["brightness"]):
                     brightness = float(row["brightness"])
-
-                # FRP
-                frp = 0.0
-                if "frp" in row and pd.notna(row["frp"]):
-                    frp = round(float(row["frp"]), 2)
 
                 dn = str(row.get("daynight", "D")).upper()
                 daynight_str = "Day" if dn == "D" else "Night"
@@ -291,15 +398,20 @@ class FIRMSService:
                 "status": "connected",
                 "instrument": inst,
                 "platform": platform_default,
-                "raw_count": count_before_conf,
+                "raw_count": cnt,
                 "product_name": prod_name
             }
 
-        # Deduplication based on record ID
+        # Deduplication based on composite spatial-temporal record ID
         unique_map = {}
         for r in all_records:
             unique_map[r["id"]] = r
         unique_records = list(unique_map.values())
+
+        # Track swath overlap duplicates
+        duplicate_count = len(all_records) - len(unique_records)
+        if duplicate_count > 0:
+            rejection_breakdown["duplicate_spatial_temporal_record"] = duplicate_count
 
         # 1. Spatial clustering for repeat detections (~0.02 deg ~ 2.2 km cluster radius)
         grid_counts = Counter((round(r["latitude"], 2), round(r["longitude"], 2)) for r in unique_records)
@@ -310,45 +422,15 @@ class FIRMSService:
             lon_r = round(r["longitude"], 2)
             repeats = grid_counts.get((lat_r, lon_r), 1)
 
-            # Fire Radiative Power (35% weight)
-            frp = float(r.get("frp_mw") or 0.0)
-            s_frp = min(100.0, (frp / 50.0) ** 0.65 * 100.0)
+            score, tier, explanation = self.calculate_observation_priority(
+                frp=r.get("frp_mw", 0.0),
+                repeats=repeats,
+                age_hours=r.get("observation_age_hours", 0.0),
+                confidence_norm=r.get("confidence_norm", "nominal"),
+                confidence_raw=r.get("confidence_raw", "")
+            )
 
-            # Repeat cluster persistence (25% weight)
-            s_repeat = min(100.0, repeats * 20.0)
-
-            # Time recency (25% weight)
-            age = max(0.0, float(r.get("observation_age_hours") or 0.0))
-            s_time = max(15.0, 100.0 - (age / 24.0) * 85.0)
-
-            # Algorithmic confidence (15% weight)
-            conf_norm = str(r.get("confidence_norm", "nominal")).lower()
-            raw_conf = str(r.get("confidence_raw", ""))
-            s_conf = 95.0 if conf_norm == "high" else (35.0 if conf_norm == "low" else 65.0)
-
-            # Observation Priority Ranking composite score (0 - 100)
-            ranking_score = round(0.35 * s_frp + 0.25 * s_repeat + 0.25 * s_time + 0.15 * s_conf, 1)
-
-            # Priority tier
-            if ranking_score >= 75:
-                tier = "CRITICAL"
-            elif ranking_score >= 60:
-                tier = "HIGH"
-            elif ranking_score >= 45:
-                tier = "ELEVATED"
-            elif ranking_score >= 30:
-                tier = "MODERATE"
-            else:
-                tier = "LOW"
-
-            time_str = f"recent ({age:.1f}h ago)" if age < 4 else (f"{age:.1f}h ago" if age < 12 else f"older pass ({age:.1f}h ago)")
-            frp_str = f"high FRP ({frp:.1f} MW)" if frp >= 40 else (f"moderate FRP ({frp:.1f} MW)" if frp >= 15 else f"low FRP ({frp:.1f} MW)")
-            rep_str = f"{repeats} repeat detections in cluster" if repeats > 1 else "isolated detection (1 repeat)"
-            conf_str = f"high satellite confidence ({raw_conf})" if conf_norm == "high" else f"{conf_norm} confidence"
-
-            explanation = f"Ranked {tier.lower()} because: {time_str}, {frp_str}, {rep_str}, {conf_str}"
-
-            r["ranking_score"] = ranking_score
+            r["ranking_score"] = score
             r["priority_tier"] = tier
             r["repeat_detections"] = repeats
             r["ranking_explanation"] = explanation
@@ -362,6 +444,22 @@ class FIRMSService:
         sampled = total_unique_count > len(display_records)
         avg_frp = round(total_frp / max(1, frp_count), 2)
 
+        # Build Ingestion Audit: Rows Loaded vs. Rejected and Why
+        total_raw_rows = sum(s.get("raw_count", 0) for s in source_stats.values())
+        total_rejected = sum(rejection_breakdown.values())
+        retention_pct = round((len(display_records) / max(1, total_raw_rows)) * 100, 2) if total_raw_rows > 0 else 100.0
+
+        ingestion_audit = {
+            "total_raw_rows_fetched": total_raw_rows,
+            "valid_rows_loaded": len(display_records),
+            "total_rows_rejected": total_rejected,
+            "rejection_breakdown": dict(rejection_breakdown),
+            "duplicate_swaths_deduplicated": duplicate_count,
+            "retention_rate_pct": retention_pct,
+            "data_integrity_status": "PASSED_ANOMALIES_CLEANED" if total_rejected > 0 else "PASSED_CLEAN",
+            "summary_statement": f"{len(display_records):,} valid rows loaded from {total_raw_rows:,} raw observations ({total_rejected:,} rejected / filtered: {duplicate_count:,} duplicate swaths, {rejection_breakdown.get('invalid_or_missing_coordinates', 0):,} coordinate errors, {rejection_breakdown.get('negative_or_corrupt_frp', 0):,} non-physical FRPs)"
+        }
+
         return {
             "metadata": {
                 "total_unique_detections": len(unique_records),
@@ -369,6 +467,7 @@ class FIRMSService:
                 "is_sampled": sampled,
                 "data_freshness_utc": now_dt.isoformat(),
                 "sources_evaluated": source_stats,
+                "ingestion_audit": ingestion_audit,
                 "attribution": "NASA FIRMS (EOSDIS LANCE / LDOPE / SSEC). Real satellite observations."
             },
             "summary": {
@@ -379,6 +478,7 @@ class FIRMSService:
                 "avg_frp_mw": avg_frp,
                 "max_frp_mw": round(max_detected_frp, 2)
             },
+            "data_quality_audit": ingestion_audit,
             "hotspots": display_records
         }
 

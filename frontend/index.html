@@ -412,7 +412,10 @@
               <h3 class="tab-title">Ranked Satellite Observations (Individual Priority Scoring)</h3>
               <p class="tab-subtitle" id="tableSubtitle">Individual detections ranked by observation time recency, confidence, Fire Radiative Power (FRP), and spatial repeat cluster detections — with transparent per-observation explanations</p>
             </div>
-            <div class="table-counts-badge" id="tableCountBadge">0 records</div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <div class="audit-summary-pill" id="auditSummaryPill" title="Auditing data pipeline integrity">🛡️ Quality Audit: Loading...</div>
+              <div class="table-counts-badge" id="tableCountBadge">0 records</div>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="data-table ranked-hotspots-table" id="hotspotsTable">

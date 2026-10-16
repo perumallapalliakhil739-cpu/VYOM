@@ -374,6 +374,18 @@ const App = {
       }
       satPillsContainer.innerHTML = pillsHtml;
     }
+
+    // Ingestion Audit Summary Pill & Table Subtitle
+    const audit = data.data_quality_audit || meta.ingestion_audit || {};
+    const auditPill = document.getElementById('auditSummaryPill');
+    const tableSub = document.getElementById('tableSubtitle');
+    if (auditPill && audit.valid_rows_loaded !== undefined) {
+      auditPill.innerHTML = `🛡️ Audit: ${audit.valid_rows_loaded.toLocaleString()} Loaded • ${audit.total_rows_rejected.toLocaleString()} Filtered/Rejected`;
+      auditPill.title = audit.summary_statement || 'Data Ingestion & Integrity Quality Audit';
+    }
+    if (tableSub && audit.total_raw_rows_fetched) {
+      tableSub.innerText = `${audit.valid_rows_loaded.toLocaleString()} valid observations loaded from ${audit.total_raw_rows_fetched.toLocaleString()} raw detections (${audit.total_rows_rejected.toLocaleString()} rejected / filtered: ${audit.duplicate_swaths_deduplicated || 0} swath duplicates, ${audit.rejection_breakdown?.invalid_or_missing_coordinates || 0} coordinate errors, ${audit.rejection_breakdown?.negative_or_corrupt_frp || 0} corrupt FRPs).`;
+    }
   },
 
   updateWeatherUI(wData) {

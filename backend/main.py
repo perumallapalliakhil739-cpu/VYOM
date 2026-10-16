@@ -115,6 +115,15 @@ def get_hotspots_summary():
         "summary": data["summary"]
     }
 
+@app.get("/api/audit/ingestion")
+def get_ingestion_audit():
+    """
+    Returns the Data Ingestion & Quality Audit summary:
+    Total rows loaded vs rejected, duplicate swath drops, and reason breakdown.
+    """
+    data = firms_service.get_all_normalized_hotspots(max_points=50)
+    return data.get("data_quality_audit", {})
+
 @app.get("/api/weather")
 def get_weather(
     lat: float = Query(..., description="Latitude"),

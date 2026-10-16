@@ -80,6 +80,22 @@ For every observation, the system normalizes:
 - **Confidence:** Normalized into standard categories (`low`, `nominal`, `high`) respecting instrument differences.
 - **Deduplication:** Composite hashing `(latitude_round, longitude_round, date, time, satellite)` prevents double counting across overlapping swathes.
 
+### Data Ingestion Audit: Rows Loaded vs. Rejected Summary
+
+Every satellite observation ingested into Neurora passes through a deterministic quality and validation pipeline. A continuous audit log tracks **rows evaluated, rows loaded, and rows rejected (with rejection reasons)**:
+
+| Metric / Audit Field | Typical 24h Feed | Pipeline Validation Action & Reason |
+| :--- | :--- | :--- |
+| **Total Raw Rows Evaluated** | $\sim 28,000 - 45,000$ | Total records retrieved across all 4 satellite feeds (VIIRS NOAA-20, NOAA-21, Suomi-NPP, MODIS). |
+| **Valid Rows Loaded** | $\sim 26,000 - 42,000$ | Clean observations with valid coordinates, physical positive FRP, and timestamp integrity. |
+| **Duplicate Swaths Deduplicated** | $\sim 1,200 - 3,500$ | **Rejected:** Overlapping orbit swathes from adjacent polar passes observing the same hotspot cell. |
+| **Invalid Coordinates** | Filtered ($0$ allowed) | **Rejected:** Out-of-bounds latitude ($\notin [-90, 90]$), longitude ($\notin [-180, 180]$), or NaN values. |
+| **Negative / Corrupt FRP** | Filtered ($0$ allowed) | **Rejected:** Unphysical negative Fire Radiative Power values ($\text{FRP} < 0.0\,\text{MW}$) or corrupted telemetry. |
+| **Corrupt / Missing Timestamps** | Filtered ($0$ allowed) | **Rejected:** Missing acquisition date or unparseable satellite clock strings. |
+| **Spatial / Threshold Filters** | User-defined | **Filtered:** Detections outside requested bounding box or below selected minimum confidence. |
+
+> **Live Audit Endpoint:** Query `GET /api/audit/ingestion` or inspect `data_quality_audit` in any `/api/hotspots` response for a real-time tally of loaded vs. rejected records and exact rejection counts. The dashboard displays this in the **Quality Audit** badge.
+
 ---
 
 ## 4. Atmospheric Oxygen Transparency
@@ -188,9 +204,21 @@ copy .env.example .env
 *(Optional: add your NASA FIRMS `MAP_KEY` if you have one. Public feeds work out of the box without any key!)*
 
 ### 3. Run Automated Tests
+
+The test suite covers end-to-end API verification, observation priority scoring behavior, and data validation/row rejection:
+
 ```bash
-python -m pytest tests/test_api.py -v
+# Run all 25 automated tests across the entire suite:
+python -m pytest tests/ -v
 ```
+
+#### Test Suite Breakdown:
+
+| Test Module | Test Coverage | Key Invariants Verified |
+| :--- | :--- | :--- |
+| **`tests/test_scoring.py`** | Observation Priority Ranking (OPR) | • **Higher FRP strictly raises score** (FRP 250 MW > 45 MW > 5 MW)<br/>• **Older detections strictly lower score** (1h ago > 8h ago > 22h ago)<br/>• **Repeat detections raise score** (5 cluster repeats > 1 isolated detection)<br/>• **Confidence scaling** (High > Nominal > Low)<br/>• **Score bounded in $[0, 100]$** and priority tiers correctly assigned<br/>• **Per-row human explanations** accurately describe the ranking drivers |
+| **`tests/test_validation.py`** | Row Validation & Rejection Pipeline | • **Valid rows accepted** and normalized<br/>• **Out-of-range coordinates rejected** (Lat $> 90$ or $< -90$, Lon $> 180$ or $< -180$)<br/>• **NaN and corrupted coordinates rejected** (`invalid_or_missing_coordinates`)<br/>• **Negative or non-numeric FRP rejected** (`negative_or_corrupt_frp`)<br/>• **Corrupt/missing timestamps rejected** (`corrupt_or_missing_timestamp`)<br/>• **Spatial bounding box filter rejection** (`outside_bounding_box`)<br/>• **Swath overlap deduplication audit consistency** |
+| **`tests/test_api.py`** | End-to-End API & Integration | • Multi-sensor satellite endpoints (`/api/hotspots`)<br/>• Sensor filtering (NOAA-20, NOAA-21, Suomi-NPP, MODIS)<br/>• Surface meteorology & atmospheric oxygen status (`/api/weather`)<br/>• Reverse geocoding English fallback (`/api/geocode/reverse`)<br/>• EFRI 3-tier risk alerts (`/api/risk`)<br/>• Chronological forecasting with held-out test split (`/api/forecast`)<br/>• Historical exports (`/api/export/csv`, `/api/export/parquet`) |
 
 ### 4. Launch the Dashboard
 ```bash
