@@ -179,7 +179,7 @@
     <div class="metric-card">
       <div class="metric-header">
         <span class="metric-title">NEXT-DAY COUNT ESTIMATE</span>
-        <span class="metric-tag info" id="metricForecastModel">Poisson regression</span>
+        <span class="metric-tag info" id="metricForecastModel">Lag-1 persistence</span>
       </div>
       <div class="metric-value-row">
         <span class="metric-number" id="metricForecastCount">--</span>
@@ -384,7 +384,7 @@
             <div class="comparison-card highlight-border">
               <div class="comp-badge alternative">Alternative Model</div>
               <div class="comp-name" id="evalAltModelName">Poisson regression</div>
-              <div class="comp-desc">A statistical count model using recent counts, seasonal terms, and weather inputs</div>
+              <div class="comp-desc">A Poisson count regression using recent counts, seasonal terms, and weather inputs</div>
               <div class="comp-metrics">
                 <div class="metric-row">
                   <span>Held-Out MAE:</span>

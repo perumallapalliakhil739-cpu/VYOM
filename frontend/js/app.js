@@ -597,10 +597,10 @@ const App = {
     const fBaseline = document.getElementById('metricBaselineCount');
     const fModel = document.getElementById('metricForecastModel');
 
-    if (fCount) fCount.innerText = (nextDay.alternative_prediction || 0).toLocaleString();
+    if (fCount) fCount.innerText = (nextDay.prediction ?? nextDay.baseline_prediction ?? 0).toLocaleString();
     if (fTrend) fTrend.innerText = `${nextDay.trend_vs_yesterday} vs Yesterday`;
     if (fBaseline) fBaseline.innerText = (nextDay.baseline_prediction || 0).toLocaleString();
-    if (fModel) fModel.innerText = nextDay.model_name || 'Poisson regression';
+    if (fModel) fModel.innerText = nextDay.model_name || 'Lag-1 persistence';
 
     // Update Lower Forecasting Tab
     const evalPill = document.getElementById('evalPeriodPill');

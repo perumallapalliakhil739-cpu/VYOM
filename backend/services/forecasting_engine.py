@@ -28,8 +28,8 @@ class TimeSeriesForecastingEngine:
         # Lag 1: count at t-1
         data["lag_1"] = data["daily_detection_count"].shift(1)
         data["lag_2"] = data["daily_detection_count"].shift(2)
-        data["rolling_mean_7"] = data["daily_detection_count"].shift(1).rolling(window=7, min_periods=3).mean()
-        data["rolling_std_7"] = data["daily_detection_count"].shift(1).rolling(window=7, min_periods=3).std()
+        data["rolling_mean_7"] = data["daily_detection_count"].shift(1).rolling(window=7, min_periods=1).mean()
+        data["rolling_std_7"] = data["daily_detection_count"].shift(1).rolling(window=7, min_periods=2).std().fillna(0.0)
 
         # Calendar features
         dates = pd.to_datetime(data["date"])
@@ -44,8 +44,11 @@ class TimeSeriesForecastingEngine:
         data["wind_feat"] = data["mean_wind_kmh"].fillna(12.0)
         data["precip_feat"] = data["total_precip_mm"].fillna(0.0)
 
-        # Drop initial rows where lags are undefined
-        data.dropna(subset=["lag_1", "lag_2", "rolling_mean_7"], inplace=True)
+        # Keep every row with a previous observed count so lag-1 evaluation uses
+        # the same chronological 80/20 setup as the simple persistence benchmark.
+        # Early secondary features are safely initialized from the available history.
+        data["lag_2"] = data["lag_2"].fillna(data["lag_1"])
+        data.dropna(subset=["lag_1", "rolling_mean_7"], inplace=True)
         data.reset_index(drop=True, inplace=True)
         return data
 
@@ -179,11 +182,12 @@ class TimeSeriesForecastingEngine:
             },
             "next_day_forecast": {
                 "date": (pd.to_datetime(data["date"].iloc[-1]) + timedelta(days=1)).strftime("%Y-%m-%d"),
+                "prediction": next_day_baseline,
                 "alternative_prediction": next_day_alt,
                 "baseline_prediction": next_day_baseline,
-                "model_name": model_name,
+                "model_name": "Lag-1 persistence",
                 "latest_observed_count": int(latest_observed_count),
-                "trend_vs_yesterday": "Increasing" if next_day_alt > latest_observed_count else "Decreasing" if next_day_alt < latest_observed_count else "Stable"
+                "trend_vs_yesterday": "Increasing" if next_day_baseline > latest_observed_count else "Decreasing" if next_day_baseline < latest_observed_count else "Stable"
             },
             "model_comparison": {
                 "baseline_model": {
