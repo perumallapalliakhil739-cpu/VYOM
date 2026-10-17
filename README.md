@@ -285,6 +285,7 @@ Open your browser at: **[http://localhost:8000](http://localhost:8000)**
 - **CSV Export:** `GET /api/export/csv` or via the dashboard "Export CSV" button.
 - **Parquet Export:** `GET /api/export/parquet` for fast analytical querying.
 - **Jupyter Notebook:** Open `notebooks/forecasting_evaluation.ipynb` to step through model training, held-out evaluation, and residual plotting.
+- **Optional CIFAR-10 CNN example:** `notebooks/cifar10_cnn.py` trains a small image classifier on general CIFAR-10 objects. Install its separate dependencies with `pip install -r requirements-cifar10.txt`, then run `python notebooks/cifar10_cnn.py`. It downloads CIFAR-10 into `data/cifar10/` and saves weights under `models/`; this model is not used by the wildfire dashboard and does not classify fire imagery.
 
 ---
 

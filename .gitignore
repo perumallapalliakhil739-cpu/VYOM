@@ -10,6 +10,7 @@ data/cache/*
 *.parquet
 *.csv
 *.db
+*.pth
 .pytest_cache/
 .coverage
 .ipynb_checkpoints/
