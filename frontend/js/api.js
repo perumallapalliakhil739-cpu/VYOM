@@ -77,6 +77,29 @@ const API = {
     }
   },
 
+  async getFireImageStatus() {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/fire-image/status`);
+      return await res.json();
+    } catch (err) {
+      console.error('API Error in getFireImageStatus:', err);
+      return null;
+    }
+  },
+
+  async reviewFireImage(file) {
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch(`${this.baseUrl}/api/fire-image/review`, { method: 'POST', body: form });
+      const body = await res.json();
+      return res.ok ? body : { error: body.detail || 'Image review failed.' };
+    } catch (err) {
+      console.error('API Error in reviewFireImage:', err);
+      return { error: 'Could not reach the image review service.' };
+    }
+  },
+
   async getRegions() {
     try {
       const res = await fetch(`${this.baseUrl}/api/regions`);

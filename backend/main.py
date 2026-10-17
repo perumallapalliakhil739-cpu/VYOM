@@ -2,7 +2,7 @@ import os
 import logging
 from pathlib import Path
 from typing import Optional, List
-from fastapi import FastAPI, Query, HTTPException, Response
+from fastapi import FastAPI, Query, HTTPException, Response, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -14,6 +14,7 @@ from backend.services.geocoding_service import geocoding_service
 from backend.services.risk_engine import risk_engine
 from backend.services.historical_service import historical_service, REGIONS
 from backend.services.forecasting_engine import forecasting_engine
+from backend.services.fire_image_service import fire_image_service
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -202,6 +203,26 @@ def get_forecast(
     with Alternative (Poisson count regression) on chronologically held-out test data.
     """
     return forecasting_engine.run_forecast(geo_id=geo_id)
+
+@app.get("/api/fire-image/status")
+def get_fire_image_status():
+    """Report whether a locally trained image model is available."""
+    return fire_image_service.status()
+
+@app.post("/api/fire-image/review")
+async def review_fire_image(file: UploadFile = File(...)):
+    """Classify one uploaded image with the optional local fire-image model."""
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=415, detail="Upload a JPEG, PNG, or WebP image.")
+    image_bytes = await file.read(8 * 1024 * 1024 + 1)
+    if len(image_bytes) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image must be 8 MB or smaller.")
+    try:
+        return fire_image_service.predict(image_bytes)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @app.get("/api/regions")
 def get_regions():

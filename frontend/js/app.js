@@ -30,6 +30,7 @@ const App = {
 
     // Setup UI event listeners
     this.setupEventListeners();
+    this.loadFireImageStatus();
 
     // Initial Load
     await this.loadInitialData();
@@ -199,6 +200,11 @@ const App = {
         if (targetContent) targetContent.classList.add('active');
       });
     });
+
+    const reviewImageButton = document.getElementById('btnReviewFireImage');
+    if (reviewImageButton) {
+      reviewImageButton.addEventListener('click', () => this.reviewFireImage());
+    }
 
     // Settings Modal
     const btnSettings = document.getElementById('btnSettings');
@@ -660,6 +666,33 @@ const App = {
       }));
       Charts.renderTimeSeries('timeSeriesChart', tsData, forecast.geographic_unit?.name);
     }
+  },
+
+  async loadFireImageStatus() {
+    const status = document.getElementById('fireImageStatus');
+    if (!status) return;
+    const response = await API.getFireImageStatus();
+    status.innerText = response?.message || 'Image review service is unavailable.';
+  },
+
+  async reviewFireImage() {
+    const input = document.getElementById('fireImageInput');
+    const result = document.getElementById('fireImageStatus');
+    const file = input?.files?.[0];
+    if (!result) return;
+    if (!file) {
+      result.innerText = 'Choose an image first.';
+      return;
+    }
+    result.innerText = 'Reviewing image...';
+    const response = await API.reviewFireImage(file);
+    if (!response || response.error) {
+      result.innerText = response?.error || 'Image review failed.';
+      return;
+    }
+    const scores = Object.entries(response.class_scores || {})
+      .map(([name, score]) => `${name}: ${(score * 100).toFixed(1)}%`).join(' · ');
+    result.innerText = `${response.label} — model score ${(response.score * 100).toFixed(1)}%. ${scores}. ${response.note}`;
   },
 
   populateHotspotsTable(records) {

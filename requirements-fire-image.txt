@@ -1,0 +1,4 @@
+# Optional dependencies for fire-image training and inference.
+torch
+torchvision
+pillow

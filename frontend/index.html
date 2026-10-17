@@ -328,6 +328,7 @@
           <button class="tab-btn active" data-tab="tabTable">🎯 Ranked Observation Triage & Explanations</button>
           <button class="tab-btn" data-tab="tabTimeSeries">Historical Daily Counts & Trends</button>
           <button class="tab-btn" data-tab="tabForecasting">Forecasting Model Evaluation (Chronological Held-Out)</button>
+          <button class="tab-btn" data-tab="tabFireImage">Fire Image Review (Optional CNN)</button>
           <button class="tab-btn" data-tab="tabAtmosphericScience">🔬 Satellite Science & Cloud/Smoke Penetration</button>
         </div>
 
@@ -413,6 +414,24 @@
           </div>
           <div class="forecast-disclaimer">
             <strong>Counting Methodology Definition:</strong> Forecasted values represent satellite-observed active fire detection counts (VIIRS/MODIS pixels meeting thermal anomaly thresholds). They do not equal individual ground fires or burned area acreage.
+          </div>
+        </div>
+
+        <div class="tab-content" id="tabFireImage">
+          <div class="tab-content-header">
+            <div>
+              <h3 class="tab-title">Fire / Non-Fire Image Review</h3>
+              <p class="tab-subtitle">Optional CNN trained on labeled aerial fire imagery; separate from satellite hotspot counts.</p>
+            </div>
+          </div>
+          <div class="fire-image-review-card">
+            <label for="fireImageInput">Choose a JPEG, PNG, or WebP image (8 MB max)</label>
+            <div class="fire-image-controls">
+              <input id="fireImageInput" type="file" accept="image/jpeg,image/png,image/webp">
+              <button id="btnReviewFireImage" class="btn-primary" type="button">Review image</button>
+            </div>
+            <div id="fireImageStatus" class="fire-image-result" role="status" aria-live="polite">Checking for a trained image model...</div>
+            <p class="fire-image-disclaimer">A visual model score is not calibrated or independently validated for field use. Images and scores require human review. This feature is not an emergency-response system and does not verify active incidents.</p>
           </div>
         </div>
 

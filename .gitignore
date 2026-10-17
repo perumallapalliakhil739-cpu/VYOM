@@ -7,6 +7,7 @@ env/
 venv/
 data/cache/*
 !data/cache/.gitkeep
+data/fire_images/
 *.parquet
 *.csv
 *.db

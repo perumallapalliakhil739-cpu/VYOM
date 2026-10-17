@@ -1,3 +1,0 @@
-# Optional dependencies for notebooks/cifar10_cnn.py; not needed by the dashboard.
-torch
-torchvision
